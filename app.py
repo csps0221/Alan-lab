@@ -52,9 +52,9 @@ THEMES = {
 if "history_logs" not in st.session_state:
     st.session_state.history_logs = []
 
-# AI 模型選項
+# AI 模型選項 (更新為新版 Gemini 模型，預設使用 2.0-flash 避免 404)
 MODEL_OPTIONS = {
-    "Gemini": ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
+    "Gemini": ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
     "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
 }
 
@@ -62,7 +62,7 @@ if (
     "selected_gemini_model" not in st.session_state
     or st.session_state.selected_gemini_model not in MODEL_OPTIONS["Gemini"]
 ):
-    st.session_state.selected_gemini_model = "gemini-1.5-flash"
+    st.session_state.selected_gemini_model = "gemini-2.0-flash"
 
 if (
     "selected_openai_model" not in st.session_state
@@ -363,9 +363,10 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        # 清除可能的路徑前綴，確保格式正確
         clean_model = st.session_state.selected_gemini_model.replace("models/", "")
-        models_to_try = [clean_model, "gemini-1.5-flash", "gemini-2.0-flash"]
+        
+        # 使用更新後的備用模型清單
+        models_to_try = [clean_model, "gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
         
         for model_name in models_to_try:
             try:
@@ -396,8 +397,8 @@ def call_gemini(question_text):
         client = genai.Client(api_key=GEMINI_API_KEY)
         clean_model = st.session_state.selected_gemini_model.replace("models/", "")
         
-        # 嘗試優先使用指定模型，失敗時嘗試 1.5-flash
-        models_to_try = [clean_model, "gemini-1.5-flash"]
+        # 優先使用選擇的模型，若遇 404 則自動嘗試 2.0-flash 或 2.5-flash
+        models_to_try = [clean_model, "gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
         last_err = ""
 
         for m_name in models_to_try:
