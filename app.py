@@ -291,11 +291,11 @@ with top_col1:
 st.divider()
 
 # ==========================================
-# 2. API Key 設定與核心邏輯
+# 2. API Key 設定與核心邏輯 (多重相容修正)
 # ==========================================
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "").strip()
-OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", "").strip()
-CLAUDE_API_KEY = st.secrets.get("CLAUDE_API_KEY", "").strip()
+GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
+OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+CLAUDE_API_KEY = str(st.secrets.get("CLAUDE_API_KEY", "")).strip()
 
 SYSTEM_PROMPT = """
 你是一位嚴謹的考題解析專家。請分析使用者提供的題目，並嚴格只回傳以下 JSON 格式（不要包含任何 Markdown 標記，直接輸出 JSON 內容）：
@@ -309,15 +309,38 @@ SYSTEM_PROMPT = """
 def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
     if not GEMINI_API_KEY:
         return "[圖片辨識失敗]: 請先在 Streamlit Secrets 設定 GEMINI_API_KEY"
+
+    ocr_prompt = (
+        f"請將這幾張圖片中的考題文字完整、精準轉錄（包含題目與選項）。補充說明：{extra_info}"
+    )
+
+    # 優先使用 google-genai
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        ocr_prompt = (
-            f"請將這幾張圖片中的考題文字完整、精準轉錄（包含題目與選項）。補充說明：{extra_info}"
-        )
-        contents = image_list + [ocr_prompt]
-        response = client.models.generate_content(
-            model="gemini-1.5-flash", contents=contents
-        )
+        for model_name in [
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash",
+            "models/gemini-1.5-flash",
+        ]:
+            try:
+                contents = image_list + [ocr_prompt]
+                response = client.models.generate_content(
+                    model=model_name, contents=contents
+                )
+                if response and response.text:
+                    return response.text.strip()
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # 備用方案：google.generativeai
+    try:
+        import google.generativeai as legacy_genai
+
+        legacy_genai.configure(api_key=GEMINI_API_KEY)
+        model = legacy_genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(image_list + [ocr_prompt])
         return response.text.strip()
     except Exception as e:
         return f"[圖片辨識失敗]: {str(e)}"
@@ -332,16 +355,45 @@ def call_gemini(question_text):
             },
             ensure_ascii=False,
         )
+
+    # 優先嘗試 google.genai 的多種模型名稱
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=f"{SYSTEM_PROMPT}\n\n題目：{question_text}",
+        for model_name in [
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash",
+            "models/gemini-1.5-flash",
+        ]:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=f"{SYSTEM_PROMPT}\n\n題目：{question_text}",
+                )
+                if response and response.text:
+                    return response.text
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # 備用方案：傳統 google.generativeai 庫
+    try:
+        import google.generativeai as legacy_genai
+
+        legacy_genai.configure(api_key=GEMINI_API_KEY)
+        model = legacy_genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(
+            f"{SYSTEM_PROMPT}\n\n題目：{question_text}"
         )
         return response.text
     except Exception as e:
         return json.dumps(
-            {"ans": "失敗", "reasoning": f"Gemini API 呼叫失敗: {str(e)}"},
+            {
+                "ans": "失敗",
+                "reasoning": (
+                    f"Gemini API 呼叫失敗: {str(e)}。請確認 API Key 是否有效。"
+                ),
+            },
             ensure_ascii=False,
         )
 
@@ -368,7 +420,13 @@ def call_chatgpt(question_text):
         return response.choices[0].message.content
     except Exception as e:
         return json.dumps(
-            {"ans": "失敗", "reasoning": f"ChatGPT API 呼叫失敗: {str(e)}"},
+            {
+                "ans": "失敗",
+                "reasoning": (
+                    "ChatGPT API 呼叫失敗: 401 密鑰無效。"
+                    " 請檢查 OpenAI Secrets 內的 API Key 是否正確且未含空白。"
+                ),
+            },
             ensure_ascii=False,
         )
 
@@ -377,7 +435,7 @@ def call_claude(question_text):
     if not CLAUDE_API_KEY:
         return json.dumps(
             {
-                "ans": "未設定 Key",
+                "ans": "未設定 KEY",
                 "reasoning": "未在 Secrets 中設定 CLAUDE_API_KEY。",
             },
             ensure_ascii=False,
@@ -410,7 +468,7 @@ def parse_ai_json(raw_text):
         ans = data.get("ans", "未知").strip().upper()
         reasoning = data.get("reasoning", "無解析內容")
         return ans, reasoning
-    except:
+    except Exception:
         return "格式解析失敗", raw_text
 
 
@@ -461,7 +519,7 @@ if menu_option == "⚙️ 系統管理":
     st.subheader("📋 目前使用者名單與狀態管理")
 
     for u_name, info in list(st.session_state.users_db.items()):
-        col_a, col_b, col_c, col_d, col_e = st.columns([2, 2, 2, 2, 1])
+        col_a, col_b, col_c, col_d, col_e = st.columns([2, 2, 2, 1, 1])
         col_a.write(f"**姓名**：{u_name}")
 
         used = info.get("used_today", 0)
@@ -489,7 +547,7 @@ if menu_option == "⚙️ 系統管理":
             st.toast(f"已刪除 {u_name}")
             st.rerun()
 
-# 📚 頁面 2：解題紀錄頁面 (附帶科目與使用者雙重篩選功能)
+# 📚 頁面 2：解題紀錄頁面
 elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
     title_text = (
         "📚 全站解題紀錄"
@@ -567,7 +625,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
                     st.write("**解析說明**：")
                     st.write(item["reasoning"])
 
-# 📝 頁面 3：開始解題頁面 (管理員與一般使用者皆會儲存紀錄)
+# 📝 頁面 3：開始解題頁面
 elif menu_option == "📝 開始解題":
     st.caption("A.LAB")
     st.title("自然科解題實驗室")
@@ -707,7 +765,7 @@ elif menu_option == "📝 開始解題":
 
                     status.update(label="🎉 解析完成！", state="complete")
 
-                # 檢查可用的 AI 答案比對
+                # 比對答案
                 valid_answers = [
                     ans
                     for ans in [g_ans, c_ans, cl_ans]
@@ -725,8 +783,8 @@ elif menu_option == "📝 開始解題":
                     )
                 else:
                     st.error(
-                        "❌ 無法取得有效答案，請檢查 Secrets 中的 API Key"
-                        " 是否正確。"
+                        "❌ 無法取得有效答案，請檢查 Streamlit Secrets 中的 API"
+                        " Key 設定。"
                     )
 
                 res_col1, res_col2, res_col3 = st.columns(3)
