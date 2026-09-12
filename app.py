@@ -52,15 +52,22 @@ THEMES = {
 if "history_logs" not in st.session_state:
     st.session_state.history_logs = []
 
-# 初始化 AI 模型選單與啟用開關（更新正確的官方模型名稱）
+# AI 模型選項
 MODEL_OPTIONS = {
     "Gemini": ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
     "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
 }
 
-if "selected_gemini_model" not in st.session_state or st.session_state.selected_gemini_model not in MODEL_OPTIONS["Gemini"]:
+if (
+    "selected_gemini_model" not in st.session_state
+    or st.session_state.selected_gemini_model not in MODEL_OPTIONS["Gemini"]
+):
     st.session_state.selected_gemini_model = "gemini-1.5-flash"
-if "selected_openai_model" not in st.session_state or st.session_state.selected_openai_model not in MODEL_OPTIONS["ChatGPT"]:
+
+if (
+    "selected_openai_model" not in st.session_state
+    or st.session_state.selected_openai_model not in MODEL_OPTIONS["ChatGPT"]
+):
     st.session_state.selected_openai_model = "gpt-4o-mini"
 
 if "enable_gemini" not in st.session_state:
@@ -131,18 +138,28 @@ if st.session_state.logged_in:
             st.divider()
             st.subheader("🤖 AI 模型開關與版本控制")
 
-            st.session_state.enable_gemini = st.checkbox("啟用 Gemini 模型", value=st.session_state.enable_gemini)
+            st.session_state.enable_gemini = st.checkbox(
+                "啟用 Gemini 模型", value=st.session_state.enable_gemini
+            )
             if st.session_state.enable_gemini:
                 st.session_state.selected_gemini_model = st.selectbox(
-                    "Gemini 模型版本", MODEL_OPTIONS["Gemini"],
-                    index=MODEL_OPTIONS["Gemini"].index(st.session_state.selected_gemini_model)
+                    "Gemini 模型版本",
+                    MODEL_OPTIONS["Gemini"],
+                    index=MODEL_OPTIONS["Gemini"].index(
+                        st.session_state.selected_gemini_model
+                    ),
                 )
 
-            st.session_state.enable_openai = st.checkbox("啟用 ChatGPT 模型", value=st.session_state.enable_openai)
+            st.session_state.enable_openai = st.checkbox(
+                "啟用 ChatGPT 模型", value=st.session_state.enable_openai
+            )
             if st.session_state.enable_openai:
                 st.session_state.selected_openai_model = st.selectbox(
-                    "ChatGPT 模型版本", MODEL_OPTIONS["ChatGPT"],
-                    index=MODEL_OPTIONS["ChatGPT"].index(st.session_state.selected_openai_model)
+                    "ChatGPT 模型版本",
+                    MODEL_OPTIONS["ChatGPT"],
+                    index=MODEL_OPTIONS["ChatGPT"].index(
+                        st.session_state.selected_openai_model
+                    ),
                 )
 
         st.divider()
@@ -342,16 +359,14 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
     if not GEMINI_API_KEY:
         return "[圖片辨識失敗]: 請先在 Streamlit Secrets 設定 GEMINI_API_KEY"
 
-    ocr_prompt = (
-        f"請將這幾張圖片中的考題文字完整、精準轉錄（包含題目與選項）。補充說明：{extra_info}"
-    )
+    ocr_prompt = f"請將這幾張圖片中的考題文字完整、精準轉錄（包含題目與選項）。補充說明：{extra_info}"
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        # 先嘗試使用者選定的模型，若失敗則依序嘗試其他有效模型
-        models_to_try = [st.session_state.selected_gemini_model] + [
-            m for m in MODEL_OPTIONS["Gemini"] if m != st.session_state.selected_gemini_model
-        ]
+        # 清除可能的路徑前綴，確保格式正確
+        clean_model = st.session_state.selected_gemini_model.replace("models/", "")
+        models_to_try = [clean_model, "gemini-1.5-flash", "gemini-2.0-flash"]
+        
         for model_name in models_to_try:
             try:
                 contents = image_list + [ocr_prompt]
@@ -379,20 +394,28 @@ def call_gemini(question_text):
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        selected_model = st.session_state.selected_gemini_model
+        clean_model = st.session_state.selected_gemini_model.replace("models/", "")
         
-        # 呼叫指定的 Gemini 模型
-        response = client.models.generate_content(
-            model=selected_model,
-            contents=f"{SYSTEM_PROMPT}\n\n題目：{question_text}",
-        )
-        if response and response.text:
-            return response.text
+        # 嘗試優先使用指定模型，失敗時嘗試 1.5-flash
+        models_to_try = [clean_model, "gemini-1.5-flash"]
+        last_err = ""
+
+        for m_name in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=m_name,
+                    contents=f"{SYSTEM_PROMPT}\n\n題目：{question_text}",
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as err:
+                last_err = str(err)
+                continue
 
         return json.dumps(
             {
                 "ans": "失敗",
-                "reasoning": f"Gemini API 呼叫無回應 ({selected_model})。",
+                "reasoning": f"Gemini API 呼叫失敗: {last_err}",
             },
             ensure_ascii=False,
         )
@@ -442,7 +465,10 @@ def call_chatgpt(question_text):
         return json.dumps(
             {
                 "ans": "失敗",
-                "reasoning": f"ChatGPT API 呼叫失敗 ({st.session_state.selected_openai_model}): {err_msg}",
+                "reasoning": (
+                    f"ChatGPT API 呼叫失敗"
+                    f" ({st.session_state.selected_openai_model}): {err_msg}"
+                ),
             },
             ensure_ascii=False,
         )
@@ -477,23 +503,33 @@ if menu_option == "⚙️ 系統管理":
     mod_col1, mod_col2 = st.columns(2)
     with mod_col1:
         st.session_state.enable_gemini = st.checkbox(
-            "啟用 Gemini 模型", value=st.session_state.enable_gemini, key="admin_gemini_chk"
+            "啟用 Gemini 模型",
+            value=st.session_state.enable_gemini,
+            key="admin_gemini_chk",
         )
         if st.session_state.enable_gemini:
             st.session_state.selected_gemini_model = st.selectbox(
-                "Gemini 模型選擇", MODEL_OPTIONS["Gemini"],
-                index=MODEL_OPTIONS["Gemini"].index(st.session_state.selected_gemini_model),
-                key="admin_gemini_sel"
+                "Gemini 模型選擇",
+                MODEL_OPTIONS["Gemini"],
+                index=MODEL_OPTIONS["Gemini"].index(
+                    st.session_state.selected_gemini_model
+                ),
+                key="admin_gemini_sel",
             )
     with mod_col2:
         st.session_state.enable_openai = st.checkbox(
-            "啟用 ChatGPT 模型", value=st.session_state.enable_openai, key="admin_openai_chk"
+            "啟用 ChatGPT 模型",
+            value=st.session_state.enable_openai,
+            key="admin_openai_chk",
         )
         if st.session_state.enable_openai:
             st.session_state.selected_openai_model = st.selectbox(
-                "ChatGPT 模型選擇", MODEL_OPTIONS["ChatGPT"],
-                index=MODEL_OPTIONS["ChatGPT"].index(st.session_state.selected_openai_model),
-                key="admin_openai_sel"
+                "ChatGPT 模型選擇",
+                MODEL_OPTIONS["ChatGPT"],
+                index=MODEL_OPTIONS["ChatGPT"].index(
+                    st.session_state.selected_openai_model
+                ),
+                key="admin_openai_sel",
             )
 
     st.divider()
@@ -628,7 +664,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
         # 💾 儲存檔案按鈕專區 (提供 JSON 與 CSV 格式)
         if filtered_logs:
             dl_col1, dl_col2 = st.columns(2)
-            
+
             # JSON 下載
             json_data = json.dumps(filtered_logs, ensure_ascii=False, indent=2)
             dl_col1.download_button(
@@ -636,18 +672,18 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
                 data=json_data,
                 file_name=f"alab_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                 mime="application/json",
-                use_container_width=True
+                use_container_width=True,
             )
 
             # CSV 下載
             df = pd.DataFrame(filtered_logs)
-            csv_data = df.to_csv(index=False).encode('utf-8-sig')
+            csv_data = df.to_csv(index=False).encode("utf-8-sig")
             dl_col2.download_button(
                 label="📊 存檔下載 (Excel CSV 檔)",
                 data=csv_data,
                 file_name=f"alab_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
-                use_container_width=True
+                use_container_width=True,
             )
 
         st.divider()
@@ -749,7 +785,9 @@ elif menu_option == "📝 開始解題":
 
         if not st.session_state.enable_gemini and not st.session_state.enable_openai:
             can_submit = False
-            st.error("⚠️ 管理員已將所有 AI 模型關閉，目前無法進行解題！請聯繫管理員啟用至少一個模型。")
+            st.error(
+                "⚠️ 管理員已將所有 AI 模型關閉，目前無法進行解題！請聯繫管理員啟用至少一個模型。"
+            )
 
         if st.session_state.user_role == "user" and can_submit:
             u_name = st.session_state.user_name
@@ -788,7 +826,7 @@ elif menu_option == "📝 開始解題":
                     q_text = extract_text_from_images(final_images, extra_info)
 
                     st.write("🤖 **步驟 2**：啟用之 AI 模型平行呼叫中...")
-                    
+
                     # Gemini 呼叫
                     if st.session_state.enable_gemini:
                         g_raw = call_gemini(q_text)
@@ -805,17 +843,21 @@ elif menu_option == "📝 開始解題":
 
                     # 選擇主要的顯示答案寫入紀錄
                     main_ans = g_ans if st.session_state.enable_gemini else c_ans
-                    main_reason = g_reason if st.session_state.enable_gemini else c_reason
+                    main_reason = (
+                        g_reason if st.session_state.enable_gemini else c_reason
+                    )
 
                     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    st.session_state.history_logs.append({
-                        "user": st.session_state.user_name,
-                        "time": now_str,
-                        "subject": subject,
-                        "ans": main_ans,
-                        "reasoning": main_reason,
-                        "extra_info": extra_info,
-                    })
+                    st.session_state.history_logs.append(
+                        {
+                            "user": st.session_state.user_name,
+                            "time": now_str,
+                            "subject": subject,
+                            "ans": main_ans,
+                            "reasoning": main_reason,
+                            "extra_info": extra_info,
+                        }
+                    )
 
                     status.update(label="🎉 解析完成！", state="complete")
 
@@ -841,7 +883,9 @@ elif menu_option == "📝 開始解題":
                         f"⚠️ **AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT: {c_ans})"
                     )
                 elif valid_answers:
-                    st.info(f"💡 **AI 解析答案：【 {valid_answers[0]} 】** (單模型模式)")
+                    st.info(
+                        f"💡 **AI 解析答案：【 {valid_answers[0]} 】** (單模型模式)"
+                    )
                 else:
                     st.error(
                         "❌ 無法取得有效答案，請檢查 Secrets 中的 API Key"
@@ -849,21 +893,27 @@ elif menu_option == "📝 開始解題":
                     )
 
                 # 動態呈現結果欄位
-                enabled_count = sum([st.session_state.enable_gemini, st.session_state.enable_openai])
+                enabled_count = sum(
+                    [st.session_state.enable_gemini, st.session_state.enable_openai]
+                )
                 if enabled_count > 0:
                     res_cols = st.columns(enabled_count)
                     col_idx = 0
 
                     if st.session_state.enable_gemini:
                         with res_cols[col_idx]:
-                            st.subheader(f"🤖 Gemini ({st.session_state.selected_gemini_model})")
+                            st.subheader(
+                                f"🤖 Gemini ({st.session_state.selected_gemini_model})"
+                            )
                             st.write(f"**答案**：`{g_ans}`")
                             st.write(g_reason)
                         col_idx += 1
 
                     if st.session_state.enable_openai:
                         with res_cols[col_idx]:
-                            st.subheader(f"🟢 ChatGPT ({st.session_state.selected_openai_model})")
+                            st.subheader(
+                                f"🟢 ChatGPT ({st.session_state.selected_openai_model})"
+                            )
                             st.write(f"**答案**：`{c_ans}`")
                             st.write(c_reason)
                         col_idx += 1
