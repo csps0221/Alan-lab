@@ -15,10 +15,19 @@ from streamlit_cropper import st_cropper
 st.set_page_config(page_title="A.lab 解題實驗室", layout="centered")
 
 THEMES = {
+    "全黑夜間": {
+        "bg": "#000000",
+        "text": "#FFFFFF",
+        "primary": "#FFFFFF",
+        "primary_text": "#000000",
+        "card": "#121212",
+        "sub_text": "#CCCCCC",
+    },
     "清霧白": {
         "bg": "#F8F9FA",
         "text": "#1A1A1A",
         "primary": "#2D3748",
+        "primary_text": "#FFFFFF",
         "card": "#FFFFFF",
         "sub_text": "#718096",
     },
@@ -26,6 +35,7 @@ THEMES = {
         "bg": "#F4F1EA",
         "text": "#3D3A36",
         "primary": "#8C7A6B",
+        "primary_text": "#FFFFFF",
         "card": "#FAF8F5",
         "sub_text": "#8A837A",
     },
@@ -33,29 +43,9 @@ THEMES = {
         "bg": "#E8F0EC",
         "text": "#1C3326",
         "primary": "#2D5A44",
+        "primary_text": "#FFFFFF",
         "card": "#F2F7F4",
         "sub_text": "#5C7869",
-    },
-    "奢華藍": {
-        "bg": "#EBF1F5",
-        "text": "#1A2B3C",
-        "primary": "#2A4B7C",
-        "card": "#F4F7FA",
-        "sub_text": "#5C738E",
-    },
-    "石墨灰": {
-        "bg": "#EFEFEF",
-        "text": "#222222",
-        "primary": "#4A4A4A",
-        "card": "#F8F8F8",
-        "sub_text": "#666666",
-    },
-    "深邃紅": {
-        "bg": "#F5EBEB",
-        "text": "#3A1C1C",
-        "primary": "#7A2E2E",
-        "card": "#FAFAFA",
-        "sub_text": "#8C5C5C",
     },
 }
 
@@ -108,7 +98,6 @@ if st.session_state.logged_in:
     st.write(f"👤 **{st.session_state.user_name}**")
     st.divider()
 
-    # 依角色顯示選單選項
     if st.session_state.user_role == "admin":
       menu_options = ["⚙️ 系統管理", "📝 開始解題", "📚 所有人解題紀錄"]
     else:
@@ -130,28 +119,62 @@ if st.session_state.logged_in:
       st.session_state.must_change_password = False
       st.rerun()
 else:
-  selected_theme = "清霧白"
+  selected_theme = "全黑夜間"
   menu_option = "📝 開始解題"
 
 t = THEMES[selected_theme]
 
-# CSS 設定：將文字圖層 (z-index) 設在最上層，顏色與背景設在底層
+# CSS 設定：初始頁面全黑、文字全白、選項/按鈕為白底黑字，且滑鼠移過不變色
 st.markdown(
     f"""
 <style>
-    .stApp {{
+    /* 全局背景與文字 */
+    .stApp, div[data-testid="stSidebar"] {{
         background-color: {t["bg"]} !important;
-        position: relative;
-        z-index: 0;
+        color: {t["text"]} !important;
     }}
-    .stApp * {{
-        color: {t["text"]};
+    
+    /* 所有文字圖層設置在最上層 */
+    p, span, h1, h2, h3, h4, h5, h6, label {{
+        color: {t["text"]} !important;
         position: relative;
         z-index: 10;
     }}
+
+    /* 按鈕、輸入框、選單等元件：背景白色，文字永遠為黑色 */
+    div.stButton > button, 
+    div[data-baseweb="select"] > div, 
+    input, 
+    textarea, 
+    div[data-baseweb="popover"] *, 
+    ul[role="listbox"] li {{
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        border-color: #FFFFFF !important;
+    }}
+
+    /* 確保輸入框與選單內的文字為純黑 */
+    div[data-baseweb="select"] span, input, textarea {{
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+    }}
+
+    /* 取消滑鼠移過（Hover）的變色效果，保持原本顏色 */
+    div.stButton > button:hover,
+    div.stButton > button:active,
+    div.stButton > button:focus,
+    div[data-baseweb="select"] > div:hover,
+    ul[role="listbox"] li:hover {{
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        border-color: #FFFFFF !important;
+        box-shadow: none !important;
+    }}
+
+    /* 步驟圖示 */
     .step-number {{
-        background-color: {t["primary"]};
-        color: #FFFFFF !important;
+        background-color: #FFFFFF;
+        color: #000000 !important;
         border-radius: 50%;
         width: 28px;
         height: 28px;
@@ -161,8 +184,8 @@ st.markdown(
         font-weight: bold;
         font-size: 14px;
         margin-right: 10px;
-        z-index: 12;
     }}
+    
     .step-header {{
         display: flex;
         align-items: center;
@@ -170,21 +193,14 @@ st.markdown(
         font-weight: 700;
         color: {t["text"]};
         margin-bottom: 8px;
-        z-index: 12;
     }}
+    
     .sub-text {{
         color: {t["sub_text"]} !important;
         font-size: 13px;
         margin-left: 38px;
         margin-top: -6px;
         margin-bottom: 14px;
-        z-index: 12;
-    }}
-    div[data-testid="stForm"], div.stButton > button[kind="primary"] {{
-        background-color: {t["primary"]} !important;
-        border-color: {t["primary"]} !important;
-        color: #FFFFFF !important;
-        z-index: 15;
     }}
 </style>
 """,
@@ -495,7 +511,7 @@ else:
           cropped_img = st_cropper(
               raw_img,
               realtime_update=True,
-              box_color="#000000",
+              box_color="#FFFFFF",
               key=f"crop_{idx}",
           )
           st.session_state.cropped_images[idx] = cropped_img
@@ -621,6 +637,11 @@ else:
         with res_col3:
           st.subheader("🟣 Claude")
           st.write(f"**答案**：`{cl_ans}`")
+          st.write(cl_reason)
+  else:
+    st.info(
+        "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
+    )
           st.write(cl_reason)
   else:
     st.info(
