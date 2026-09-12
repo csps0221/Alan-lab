@@ -277,7 +277,7 @@ else:
 
 t = THEMES[selected_theme]
 
-# CSS 注入 (恢復色彩與卡片美化)
+# CSS 注入
 st.markdown(
     f"""
 <style>
@@ -319,7 +319,6 @@ st.markdown(
         margin-bottom: 8px !important;
     }}
     
-    /* 🌟 AI 卡片專屬顏色 */
     .ai-card-gemini {{
         background-color: {t["card_gemini"]};
         border: 1px solid #2B4C7E;
@@ -416,7 +415,7 @@ with top_col1:
 st.divider()
 
 # ==========================================
-# 2. AI 引擎與 Prompt
+# 2. AI 引擎與 Prompt (修復子執行緒存取問題)
 # ==========================================
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
@@ -453,7 +452,9 @@ def build_system_prompt(mode="full"):
 """
 
 
-def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
+def extract_text_from_images(
+    image_list: list, model_name: str, extra_info: str = ""
+) -> str:
   if not GEMINI_API_KEY:
     return "[圖片辨識失敗]: 未設定 GEMINI_API_KEY"
 
@@ -463,7 +464,7 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
   )
   try:
     client = genai.Client(api_key=GEMINI_API_KEY)
-    clean_model = st.session_state.selected_gemini_model.replace("models/", "")
+    clean_model = model_name.replace("models/", "")
     response = client.models.generate_content(
         model=clean_model, contents=image_list + [ocr_prompt]
     )
@@ -474,7 +475,7 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
     return f"[圖片辨識失敗]: {str(e)}"
 
 
-def call_gemini(question_text, mode):
+def call_gemini(question_text, mode, model_name):
   if not GEMINI_API_KEY:
     return json.dumps(
         {"ans": "未設定 Key", "reasoning": "未設定 GEMINI_API_KEY。"},
@@ -482,7 +483,7 @@ def call_gemini(question_text, mode):
     )
   try:
     client = genai.Client(api_key=GEMINI_API_KEY)
-    clean_model = st.session_state.selected_gemini_model.replace("models/", "")
+    clean_model = model_name.replace("models/", "")
     prompt = f"{build_system_prompt(mode)}\n\n題目：{question_text}"
     response = client.models.generate_content(
         model=clean_model, contents=prompt
@@ -495,7 +496,7 @@ def call_gemini(question_text, mode):
     )
 
 
-def call_chatgpt(question_text, mode):
+def call_chatgpt(question_text, mode, model_name):
   if not OPENAI_API_KEY:
     return json.dumps(
         {"ans": "未設定 Key", "reasoning": "未設定 OPENAI_API_KEY。"},
@@ -504,7 +505,7 @@ def call_chatgpt(question_text, mode):
   try:
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
-        model=st.session_state.selected_openai_model,
+        model=model_name,
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": build_system_prompt(mode)},
@@ -534,11 +535,10 @@ def parse_ai_json(raw_text):
 # 3. 頁面分流與功能渲染
 # ==========================================
 
-# ⚙️ 系統管理後台 (補回使用者新增功能)
+# ⚙️ 系統管理後台
 if menu_option == "⚙️ 系統管理":
   st.title("⚙️ 管理員控制後台")
 
-  # 🌟 補回：新增使用者帳號模組
   st.subheader("➕ 新增使用者帳號")
   col_u1, col_u2 = st.columns([3, 1])
   new_username = col_u1.text_input(
@@ -783,21 +783,27 @@ elif menu_option == "📝 開始解題":
           ] += 1
           save_config_from_session()
 
+        # 抓取目前選取的 model 名稱傳給子執行緒
+        gemini_model = st.session_state.selected_gemini_model
+        openai_model = st.session_state.selected_openai_model
+
         with st.status("🚀 正在進行 AI 解析與平行驗證...", expanded=True):
           st.write("🔍 **步驟 1/2**：進行 Gemini 多圖視覺 OCR 辨識...")
-          q_text = extract_text_from_images(final_images, extra_info)
+          q_text = extract_text_from_images(
+              final_images, gemini_model, extra_info
+          )
 
           st.write("🤖 **步驟 2/2**：啟動雙 AI 模組進行平行邏輯推理...")
 
           g_raw, c_raw = "", ""
           with ThreadPoolExecutor(max_workers=2) as executor:
             future_g = (
-                executor.submit(call_gemini, q_text, mode_key)
+                executor.submit(call_gemini, q_text, mode_key, gemini_model)
                 if st.session_state.enable_gemini
                 else None
             )
             future_c = (
-                executor.submit(call_chatgpt, q_text, mode_key)
+                executor.submit(call_chatgpt, q_text, mode_key, openai_model)
                 if st.session_state.enable_openai
                 else None
             )
@@ -857,7 +863,7 @@ elif menu_option == "📝 開始解題":
               "💡 **目前為【引導模式】，請閱讀以下關鍵提示後試著自己解答！**"
           )
 
-        # 🌟 補回：兩欄顏色卡片渲染 🌟
+        # 兩欄顏色卡片渲染
         cols = st.columns(
             sum([
                 st.session_state.enable_gemini,
@@ -877,7 +883,7 @@ elif menu_option == "📝 開始解題":
             )
             st.markdown(
                 f"""<div class="ai-card-gemini">
-              <h3 style="color:#7EA6E0 !important;">🤖 Gemini ({st.session_state.selected_gemini_model})</h3>
+              <h3 style="color:#7EA6E0 !important;">🤖 Gemini ({gemini_model})</h3>
               {ans_html}
               <div>{g_reason}</div>
             </div>""",
@@ -896,7 +902,7 @@ elif menu_option == "📝 開始解題":
             )
             st.markdown(
                 f"""<div class="ai-card-openai">
-              <h3 style="color:#63E6BE !important;">🟢 ChatGPT ({st.session_state.selected_openai_model})</h3>
+              <h3 style="color:#63E6BE !important;">🟢 ChatGPT ({openai_model})</h3>
               {ans_html}
               <div>{c_reason}</div>
             </div>""",
