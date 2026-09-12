@@ -314,7 +314,11 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        for model_name in ["gemini-2.5-flash", "gemini-1.5-flash"]:
+        for model_name in [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+        ]:
             try:
                 contents = image_list + [ocr_prompt]
                 response = client.models.generate_content(
@@ -342,7 +346,11 @@ def call_gemini(question_text):
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
         last_error = ""
-        for model_name in ["gemini-2.5-flash", "gemini-1.5-flash"]:
+        for model_name in [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+        ]:
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -390,13 +398,20 @@ def call_chatgpt(question_text):
         )
         return response.choices[0].message.content
     except Exception as e:
+        err_msg = str(e)
+        if "insufficient_quota" in err_msg or "429" in err_msg:
+            return json.dumps(
+                {
+                    "ans": "失敗",
+                    "reasoning": (
+                        "OpenAI 帳號額度已用盡 (429 Error)。請至 OpenAI"
+                        " Platform 儲值點數。"
+                    ),
+                },
+                ensure_ascii=False,
+            )
         return json.dumps(
-            {
-                "ans": "失敗",
-                "reasoning": (
-                    f"ChatGPT 呼叫失敗 (401 密鑰無效或其他錯誤): {str(e)}"
-                ),
-            },
+            {"ans": "失敗", "reasoning": f"ChatGPT 呼叫失敗: {err_msg}"},
             ensure_ascii=False,
         )
 
@@ -754,7 +769,7 @@ elif menu_option == "📝 開始解題":
                 else:
                     st.error(
                         "❌ 無法取得有效答案，請檢查 Secrets 中的 API Key"
-                        " 設定。"
+                        " 設定與剩餘額度。"
                     )
 
                 res_col1, res_col2, res_col3 = st.columns(3)
