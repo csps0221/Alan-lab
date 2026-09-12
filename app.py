@@ -2,6 +2,8 @@ import json
 import os
 from datetime import datetime
 import pandas as pd
+import base64
+from io import BytesIO
 
 from google import genai
 from openai import OpenAI
@@ -20,6 +22,8 @@ DEFAULT_CONFIG = {
     "selected_openai_model": "gpt-4o-mini",
     "enable_gemini": True,
     "enable_openai": True,
+    "subjects": ["理化", "生物", "地科", "數學", "其他"],
+    "bug_reports": [],  # 存放回報紀錄
     "users_db": {
         "王小明": {
             "password": "2580",
@@ -47,7 +51,13 @@ def load_config():
         return DEFAULT_CONFIG
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            cfg = json.load(f)
+            # 確保新欄位相容性
+            if "subjects" not in cfg:
+                cfg["subjects"] = DEFAULT_CONFIG["subjects"]
+            if "bug_reports" not in cfg:
+                cfg["bug_reports"] = []
+            return cfg
     except Exception:
         return DEFAULT_CONFIG
 
@@ -60,6 +70,8 @@ def save_config_from_session():
         "selected_openai_model": st.session_state.selected_openai_model,
         "enable_gemini": st.session_state.enable_gemini,
         "enable_openai": st.session_state.enable_openai,
+        "subjects": st.session_state.subjects,
+        "bug_reports": st.session_state.bug_reports,
         "users_db": st.session_state.users_db,
     }
     save_config(config_data)
@@ -71,12 +83,23 @@ def save_config(config_data):
         json.dump(config_data, f, ensure_ascii=False, indent=4)
 
 
+# 圖片轉 Base64 方便儲存於 JSON
+def image_to_base64(pil_img):
+    buffered = BytesIO()
+    pil_img.save(buffered, format="JPEG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+
+def base64_to_image(b64_str):
+    img_data = base64.b64decode(b64_str)
+    return Image.open(BytesIO(img_data))
+
+
 # ==========================================
 # 1. 系統初始化與主題配色設定
 # ==========================================
 st.set_page_config(page_title="A.lab 解題實驗室", layout="centered")
 
-# 首次執行時讀取設定檔
 config = load_config()
 
 THEMES = {
@@ -129,6 +152,12 @@ if "daily_limit" not in st.session_state:
 if "users_db" not in st.session_state:
     st.session_state.users_db = config.get("users_db", DEFAULT_CONFIG["users_db"])
 
+if "subjects" not in st.session_state:
+    st.session_state.subjects = config.get("subjects", DEFAULT_CONFIG["subjects"])
+
+if "bug_reports" not in st.session_state:
+    st.session_state.bug_reports = config.get("bug_reports", [])
+
 if "selected_gemini_model" not in st.session_state:
     st.session_state.selected_gemini_model = config.get("selected_gemini_model", "gemini-2.0-flash")
 
@@ -165,6 +194,7 @@ if st.session_state.logged_in:
         if st.session_state.user_role == "admin":
             menu_options = [
                 "⚙️ 系統管理",
+                "🐛 使用者錯誤回報",
                 "📝 開始解題",
                 "📚 所有人解題紀錄",
             ]
@@ -175,7 +205,7 @@ if st.session_state.logged_in:
             "功能導航", menu_options, index=0, label_visibility="collapsed"
         )
 
-        # 管理員模型開關與版本切換 (變更後自動存檔)
+        # 管理員模型開關與版本切換
         if st.session_state.user_role == "admin":
             st.divider()
             st.subheader("🤖 AI 模型開關與版本控制")
@@ -374,7 +404,7 @@ if st.session_state.must_change_password:
             st.session_state.users_db[u_name]["password"] = pwd1
             st.session_state.users_db[u_name]["first_login"] = False
             st.session_state.must_change_password = False
-            save_config_from_session()  # 儲存修改後的密碼
+            save_config_from_session()
             st.success("🎉 密碼修改成功！即將進入系統...")
             st.rerun()
     st.stop()
@@ -441,10 +471,7 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
 def call_gemini(question_text):
     if not GEMINI_API_KEY:
         return json.dumps(
-            {
-                "ans": "未設定 Key",
-                "reasoning": "未在 Secrets 中設定 GEMINI_API_KEY。",
-            },
+            {"ans": "未設定 Key", "reasoning": "未在 Secrets 中設定 GEMINI_API_KEY。"},
             ensure_ascii=False,
         )
 
@@ -467,18 +494,12 @@ def call_gemini(question_text):
                 continue
 
         return json.dumps(
-            {
-                "ans": "失敗",
-                "reasoning": f"Gemini API 呼叫失敗: {last_err}",
-            },
+            {"ans": "失敗", "reasoning": f"Gemini API 呼叫失敗: {last_err}"},
             ensure_ascii=False,
         )
     except Exception as e:
         return json.dumps(
-            {
-                "ans": "失敗",
-                "reasoning": f"Gemini API 呼叫失敗 ({st.session_state.selected_gemini_model}): {str(e)}",
-            },
+            {"ans": "失敗", "reasoning": f"Gemini API 呼叫失敗: {str(e)}"},
             ensure_ascii=False,
         )
 
@@ -486,10 +507,7 @@ def call_gemini(question_text):
 def call_chatgpt(question_text):
     if not OPENAI_API_KEY:
         return json.dumps(
-            {
-                "ans": "未設定 Key",
-                "reasoning": "未在 Secrets 中設定 OPENAI_API_KEY。",
-            },
+            {"ans": "未設定 Key", "reasoning": "未在 Secrets 中設定 OPENAI_API_KEY。"},
             ensure_ascii=False,
         )
     try:
@@ -504,26 +522,8 @@ def call_chatgpt(question_text):
         )
         return response.choices[0].message.content
     except Exception as e:
-        err_msg = str(e)
-        if "insufficient_quota" in err_msg or "429" in err_msg:
-            return json.dumps(
-                {
-                    "ans": "失敗",
-                    "reasoning": (
-                        "OpenAI 帳號額度已用盡 (429 Error)。請至 OpenAI"
-                        " Platform 儲值點數。"
-                    ),
-                },
-                ensure_ascii=False,
-            )
         return json.dumps(
-            {
-                "ans": "失敗",
-                "reasoning": (
-                    f"ChatGPT API 呼叫失敗"
-                    f" ({st.session_state.selected_openai_model}): {err_msg}"
-                ),
-            },
+            {"ans": "失敗", "reasoning": f"ChatGPT API 呼叫失敗: {str(e)}"},
             ensure_ascii=False,
         )
 
@@ -551,9 +551,35 @@ def parse_ai_json(raw_text):
 # ⚙️ 頁面 1：管理員後台控制頁面
 if menu_option == "⚙️ 系統管理":
     st.title("⚙️ 管理員控制後台")
-    st.caption("調整系統設定與檢視使用者狀態")
+    st.caption("調整系統設定、管理科目與使用者狀態")
 
-    st.subheader("🤖 當前使用的 AI 模型關閉與版本控制")
+    # --- 📚 科目清單管理 ---
+    st.subheader("📚 管理科目選單")
+    st.write("目前的科目：", " | ".join([f"`{s}`" for s in st.session_state.subjects]))
+    
+    col_s1, col_s2 = st.columns([3, 1])
+    new_sub = col_s1.text_input("新增科目名稱", placeholder="例如：地科、歷史", key="add_sub_input")
+    if col_s2.button("➕ 新增科目"):
+        if new_sub.strip():
+            if new_sub in st.session_state.subjects:
+                st.warning("該科目已存在！")
+            else:
+                st.session_state.subjects.append(new_sub.strip())
+                save_config_from_session()
+                st.success(f"已成功新增科目：{new_sub}")
+                st.rerun()
+
+    del_sub = st.selectbox("選擇要刪除的科目", ["請選擇"] + st.session_state.subjects)
+    if st.button("🗑️ 刪除選取科目"):
+        if del_sub != "請選擇":
+            st.session_state.subjects.remove(del_sub)
+            save_config_from_session()
+            st.success(f"已刪除科目：{del_sub}")
+            st.rerun()
+
+    st.divider()
+
+    st.subheader("🤖 AI 模型關閉與版本控制")
     mod_col1, mod_col2 = st.columns(2)
     with mod_col1:
         g_check = st.checkbox(
@@ -611,7 +637,7 @@ if menu_option == "⚙️ 系統管理":
     )
     if st.button("更新預設每日題數上限"):
         st.session_state.daily_limit = new_limit
-        save_config_from_session()  # 寫入設定檔
+        save_config_from_session()
         st.success(f"已將每日提問上限更新為：{new_limit} 題，並完成存檔！")
         st.rerun()
 
@@ -630,10 +656,8 @@ if menu_option == "⚙️ 系統管理":
                 "first_login": True,
                 "used_today": 0,
             }
-            save_config_from_session()  # 自動存檔至 json
-            st.success(
-                f"已成功新增使用者：{new_name}（預設密碼：{new_pass}），並完成存檔！"
-            )
+            save_config_from_session()
+            st.success(f"已成功新增使用者：{new_name}（預設密碼：{new_pass}）！")
             st.rerun()
         else:
             st.warning("請填寫姓名與預設密碼！")
@@ -646,32 +670,68 @@ if menu_option == "⚙️ 系統管理":
         col_a.write(f"**姓名**：{u_name}")
 
         used = info.get("used_today", 0)
-        col_b.write(
-            f"**今日使用**：`{used}/{st.session_state.daily_limit}` 題"
-        )
+        col_b.write(f"**今日使用**：`{used}/{st.session_state.daily_limit}` 題")
 
         if col_c.button("🔄 重置題數", key=f"reset_limit_{u_name}"):
             st.session_state.users_db[u_name]["used_today"] = 0
-            save_config_from_session()  # 自動存檔
+            save_config_from_session()
             st.toast(f"已重置 {u_name} 今日已用題數為 0，並存檔！")
             st.rerun()
 
         if col_d.button("🔑 還原密碼", key=f"reset_pwd_{u_name}"):
-            st.session_state.users_db[u_name]["password"] = (
-                DEFAULT_USER_PASSWORD
-            )
+            st.session_state.users_db[u_name]["password"] = DEFAULT_USER_PASSWORD
             st.session_state.users_db[u_name]["first_login"] = True
-            save_config_from_session()  # 自動存檔
-            st.toast(
-                f"已將 {u_name} 的密碼重置為 {DEFAULT_USER_PASSWORD}，並存檔！"
-            )
+            save_config_from_session()
+            st.toast(f"已將 {u_name} 的密碼重置為預設值，並存檔！")
             st.rerun()
 
         if col_e.button("🗑️", key=f"del_{u_name}"):
             del st.session_state.users_db[u_name]
-            save_config_from_session()  # 自動存檔
+            save_config_from_session()
             st.toast(f"已刪除 {u_name}，並更新存檔！")
             st.rerun()
+
+# 🐛 頁面 1.5：管理員查看錯誤回報頁面
+elif menu_option == "🐛 使用者錯誤回報":
+    st.title("🐛 使用者錯誤回報管理")
+    st.caption("檢視使用者送出的問題與截圖報告")
+    st.divider()
+
+    reports = st.session_state.bug_reports
+
+    if not reports:
+        st.info("目前沒有任何錯誤回報！")
+    else:
+        st.write(f"共收到 **{len(reports)}** 則問題回報：")
+        
+        for idx, item in enumerate(reversed(reports)):
+            real_idx = len(reports) - 1 - idx
+            status_tag = "✅ 已處理" if item.get("status") == "resolved" else "⏳ 待處理"
+            
+            with st.expander(f"📌 [{item['time']}] 回報人：{item['user']} | 狀態：{status_tag}"):
+                st.write(f"**回報時間**：{item['time']}")
+                st.write(f"**回報人**：{item['user']}")
+                st.write(f"**問題描述**：")
+                st.info(item["description"])
+
+                if item.get("image_b64"):
+                    st.write("**附帶照片 / 截圖：**")
+                    img = base64_to_image(item["image_b64"])
+                    st.image(img, use_container_width=True)
+
+                col_b1, col_b2 = st.columns(2)
+                if item.get("status") != "resolved":
+                    if col_b1.button("標記為已處理", key=f"resolve_{real_idx}"):
+                        st.session_state.bug_reports[real_idx]["status"] = "resolved"
+                        save_config_from_session()
+                        st.toast("已標記為處理完成！")
+                        st.rerun()
+                
+                if col_b2.button("刪除此回報", key=f"del_bug_{real_idx}"):
+                    st.session_state.bug_reports.pop(real_idx)
+                    save_config_from_session()
+                    st.toast("已成功刪除此筆回報！")
+                    st.rerun()
 
 # 📚 頁面 2：解題紀錄頁面
 elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
@@ -703,9 +763,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
         available_users = ["全部使用者"] + list(
             set([log["user"] for log in base_logs])
         )
-        available_subjects = ["全部科目"] + list(
-            set([log["subject"] for log in base_logs])
-        )
+        available_subjects = ["全部科目"] + st.session_state.subjects
 
         with filter_col1:
             selected_user_filter = (
@@ -722,15 +780,11 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
         filtered_logs = base_logs
         if selected_user_filter != "全部使用者":
             filtered_logs = [
-                log
-                for log in filtered_logs
-                if log["user"] == selected_user_filter
+                log for log in filtered_logs if log["user"] == selected_user_filter
             ]
         if selected_subject_filter != "全部科目":
             filtered_logs = [
-                log
-                for log in filtered_logs
-                if log["subject"] == selected_subject_filter
+                log for log in filtered_logs if log["subject"] == selected_subject_filter
             ]
 
         st.caption(f"共找到 **{len(filtered_logs)}** 筆符合條件的紀錄")
@@ -803,9 +857,7 @@ elif menu_option == "📝 開始解題":
         if len(uploaded_files) > 6:
             st.error("⚠️ 最多上傳 6 張圖片！")
         else:
-            tabs = st.tabs(
-                [f"圖片 {i+1}" for i in range(len(uploaded_files))]
-            )
+            tabs = st.tabs([f"圖片 {i+1}" for i in range(len(uploaded_files))])
             for idx, file in enumerate(uploaded_files):
                 with tabs[idx]:
                     raw_img = Image.open(file)
@@ -827,7 +879,8 @@ elif menu_option == "📝 開始解題":
         unsafe_allow_html=True,
     )
 
-    subject = st.selectbox("科目", ["理化", "生物", "地科", "數學", "其他"])
+    # 動態讀取管理員設定的科目清單
+    subject = st.selectbox("科目", st.session_state.subjects)
     std_answer = st.text_input(
         "標準參考答案（選填）", placeholder="例如 B、ACD、2.5 mol..."
     )
@@ -856,9 +909,7 @@ elif menu_option == "📝 開始解題":
 
         if not st.session_state.enable_gemini and not st.session_state.enable_openai:
             can_submit = False
-            st.error(
-                "⚠️ 管理員已將所有 AI 模型關閉，目前無法進行解題！請聯繫管理員啟用至少一個模型。"
-            )
+            st.error("⚠️ 管理員已將所有 AI 模型關閉，目前無法進行解題！")
 
         if st.session_state.user_role == "user" and can_submit:
             u_name = st.session_state.user_name
@@ -866,10 +917,7 @@ elif menu_option == "📝 開始解題":
             limit = st.session_state.daily_limit
             if used >= limit:
                 can_submit = False
-                st.error(
-                    f"⚠️ 您今日的提問額度（{limit}"
-                    " 題）已用完！請明日再試或聯繫管理員重置。"
-                )
+                st.error(f"⚠️ 您今日的提問額度（{limit} 題）已用完！請明日再試或聯繫管理員。")
 
         if can_submit:
             final_images = (
@@ -886,14 +934,10 @@ elif menu_option == "📝 開始解題":
                 st.warning("請先上傳至少一張題目圖片！")
             else:
                 if st.session_state.user_role == "user":
-                    st.session_state.users_db[st.session_state.user_name][
-                        "used_today"
-                    ] += 1
-                    save_config_from_session()  # 使用次數增加時自動同步存檔
+                    st.session_state.users_db[st.session_state.user_name]["used_today"] += 1
+                    save_config_from_session()
 
-                with st.status(
-                    "🚀 實驗室正在解析題目與進行 AI 比對...", expanded=True
-                ) as status:
+                with st.status("🚀 實驗室正在解析題目與進行 AI 比對...", expanded=True) as status:
                     st.write("🔍 **步驟 1**：Gemini 多圖視覺 OCR 辨識中...")
                     q_text = extract_text_from_images(final_images, extra_info)
 
@@ -912,9 +956,7 @@ elif menu_option == "📝 開始解題":
                         c_ans, c_reason = "未啟用", "管理員已關閉此模型"
 
                     main_ans = g_ans if st.session_state.enable_gemini else c_ans
-                    main_reason = (
-                        g_reason if st.session_state.enable_gemini else c_reason
-                    )
+                    main_reason = g_reason if st.session_state.enable_gemini else c_reason
 
                     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     st.session_state.history_logs.append(
@@ -937,54 +979,65 @@ elif menu_option == "📝 開始解題":
                     active_answers.append(c_ans)
 
                 valid_answers = [
-                    ans
-                    for ans in active_answers
-                    if ans not in ["未設定 Key", "失敗", "格式解析失敗", "未知", "未啟用"]
+                    ans for ans in active_answers if ans not in ["未設定 Key", "失敗", "格式解析失敗", "未知", "未啟用"]
                 ]
 
                 if valid_answers and len(set(valid_answers)) == 1:
-                    st.success(
-                        f"✅ **AI 驗證答案一致：【 {valid_answers[0]} 】**"
-                    )
+                    st.success(f"✅ **AI 驗證答案一致：【 {valid_answers[0]} 】**")
                 elif len(valid_answers) > 1 and len(set(valid_answers)) > 1:
-                    st.warning(
-                        f"⚠️ **AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT: {c_ans})"
-                    )
+                    st.warning(f"⚠️ **AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT: {c_ans})")
                 elif valid_answers:
-                    st.info(
-                        f"💡 **AI 解析答案：【 {valid_answers[0]} 】** (單模型模式)"
-                    )
+                    st.info(f"💡 **AI 解析答案：【 {valid_answers[0]} 】** (單模型模式)")
                 else:
-                    st.error(
-                        "❌ 無法取得有效答案，請檢查 Secrets 中的 API Key"
-                        " 設定與剩餘額度。"
-                    )
+                    st.error("❌ 無法取得有效答案，請檢查 Secrets 中的 API Key 設定與剩餘額度。")
 
-                enabled_count = sum(
-                    [st.session_state.enable_gemini, st.session_state.enable_openai]
-                )
+                enabled_count = sum([st.session_state.enable_gemini, st.session_state.enable_openai])
                 if enabled_count > 0:
                     res_cols = st.columns(enabled_count)
                     col_idx = 0
 
                     if st.session_state.enable_gemini:
                         with res_cols[col_idx]:
-                            st.subheader(
-                                f"🤖 Gemini ({st.session_state.selected_gemini_model})"
-                            )
+                            st.subheader(f"🤖 Gemini ({st.session_state.selected_gemini_model})")
                             st.write(f"**答案**：`{g_ans}`")
                             st.write(g_reason)
                         col_idx += 1
 
                     if st.session_state.enable_openai:
                         with res_cols[col_idx]:
-                            st.subheader(
-                                f"🟢 ChatGPT ({st.session_state.selected_openai_model})"
-                            )
+                            st.subheader(f"🟢 ChatGPT ({st.session_state.selected_openai_model})")
                             st.write(f"**答案**：`{c_ans}`")
                             st.write(c_reason)
                         col_idx += 1
+
     else:
-        st.info(
-            "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
-        )
+        st.info("尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。")
+
+    # --- 🐛 使用者錯誤/問題回報區塊 ---
+    st.divider()
+    with st.expander("🚨 發現題目解析有誤或系統異常？點此向管理員回報"):
+        st.write("若 AI 解析錯誤或圖片讀取失敗，請填寫以下資訊回報給管理員處理：")
+        bug_desc = st.text_area("請詳細說明遇到的問題或錯誤答案", key="bug_desc_input")
+        bug_img_file = st.file_uploader("上傳問題畫面/題目照片（選填）", type=["png", "jpg", "jpeg"], key="bug_img_input")
+
+        if st.button("📤 送出問題回報", use_container_width=True):
+            if not bug_desc.strip():
+                st.warning("請先填寫問題說明再送出！")
+            else:
+                img_b64 = ""
+                if bug_img_file is not None:
+                    pil_bug_img = Image.open(bug_img_file)
+                    img_b64 = image_to_base64(pil_bug_img)
+
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                report_data = {
+                    "user": st.session_state.user_name,
+                    "time": now_str,
+                    "description": bug_desc.strip(),
+                    "image_b64": img_b64,
+                    "status": "pending",
+                }
+                
+                st.session_state.bug_reports.append(report_data)
+                save_config_from_session()
+                st.success("🎉 回報已成功送出！管理員會盡快檢視與處理，謝謝你的協助。")
