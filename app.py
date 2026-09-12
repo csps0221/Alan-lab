@@ -49,7 +49,6 @@ THEMES = {
     },
 }
 
-# 全局歷史紀錄初始化
 if "history_logs" not in st.session_state:
     st.session_state.history_logs = []
 
@@ -130,7 +129,6 @@ else:
 
 t = THEMES[selected_theme]
 
-# 全局 CSS 注入與樣式整合
 st.markdown(
     f"""
 <style>
@@ -291,14 +289,14 @@ with top_col1:
 st.divider()
 
 # ==========================================
-# 2. API Key 設定與核心邏輯 (多重相容修正)
+# 2. API Key 設定與核心邏輯
 # ==========================================
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
 CLAUDE_API_KEY = str(st.secrets.get("CLAUDE_API_KEY", "")).strip()
 
 SYSTEM_PROMPT = """
-你是一位嚴謹的考題解析專家。請分析使用者提供的題目，並嚴格只回傳以下 JSON 格式（不要包含任何 Markdown 標記，直接輸出 JSON 內容）：
+你是一位嚴謹的考題解析專家。請分析使用者提供的題目，並嚴格只回傳以下 JSON 格式（不要包含任何 Markdown 標記，補充繁體中文解析）：
 {
   "ans": "正確答案選項（例如 A、B、C 或 D，若是非選擇題請給出簡短最終答案）",
   "reasoning": "詳細的解題步驟與觀念說明"
@@ -314,14 +312,9 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
         f"請將這幾張圖片中的考題文字完整、精準轉錄（包含題目與選項）。補充說明：{extra_info}"
     )
 
-    # 優先使用 google-genai
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        for model_name in [
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash",
-            "models/gemini-1.5-flash",
-        ]:
+        for model_name in ["gemini-2.5-flash", "gemini-1.5-flash"]:
             try:
                 contents = image_list + [ocr_prompt]
                 response = client.models.generate_content(
@@ -331,17 +324,7 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
                     return response.text.strip()
             except Exception:
                 continue
-    except Exception:
-        pass
-
-    # 備用方案：google.generativeai
-    try:
-        import google.generativeai as legacy_genai
-
-        legacy_genai.configure(api_key=GEMINI_API_KEY)
-        model = legacy_genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(image_list + [ocr_prompt])
-        return response.text.strip()
+        return "[圖片辨識失敗]: 模型無法辨識內容，請確認 Gemini API Key 是否有效。"
     except Exception as e:
         return f"[圖片辨識失敗]: {str(e)}"
 
@@ -356,14 +339,10 @@ def call_gemini(question_text):
             ensure_ascii=False,
         )
 
-    # 優先嘗試 google.genai 的多種模型名稱
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        for model_name in [
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash",
-            "models/gemini-1.5-flash",
-        ]:
+        last_error = ""
+        for model_name in ["gemini-2.5-flash", "gemini-1.5-flash"]:
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -371,29 +350,21 @@ def call_gemini(question_text):
                 )
                 if response and response.text:
                     return response.text
-            except Exception:
+            except Exception as err:
+                last_error = str(err)
                 continue
-    except Exception:
-        pass
-
-    # 備用方案：傳統 google.generativeai 庫
-    try:
-        import google.generativeai as legacy_genai
-
-        legacy_genai.configure(api_key=GEMINI_API_KEY)
-        model = legacy_genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(
-            f"{SYSTEM_PROMPT}\n\n題目：{question_text}"
-        )
-        return response.text
-    except Exception as e:
         return json.dumps(
             {
                 "ans": "失敗",
                 "reasoning": (
-                    f"Gemini API 呼叫失敗: {str(e)}。請確認 API Key 是否有效。"
+                    f"Gemini API 呼叫失敗: {last_error}。請檢查 API Key 是否有效。"
                 ),
             },
+            ensure_ascii=False,
+        )
+    except Exception as e:
+        return json.dumps(
+            {"ans": "失敗", "reasoning": f"Gemini 初始化失敗: {str(e)}"},
             ensure_ascii=False,
         )
 
@@ -423,8 +394,7 @@ def call_chatgpt(question_text):
             {
                 "ans": "失敗",
                 "reasoning": (
-                    "ChatGPT API 呼叫失敗: 401 密鑰無效。"
-                    " 請檢查 OpenAI Secrets 內的 API Key 是否正確且未含空白。"
+                    f"ChatGPT 呼叫失敗 (401 密鑰無效或其他錯誤): {str(e)}"
                 ),
             },
             ensure_ascii=False,
@@ -476,7 +446,7 @@ def parse_ai_json(raw_text):
 # 3. 頁面渲染分流
 # ==========================================
 
-# 👑 獨立頁面 1：管理員後台控制頁面
+# ⚙️ 獨立頁面 1：管理員後台控制頁面
 if menu_option == "⚙️ 系統管理":
     st.title("⚙️ 管理員控制後台")
     st.caption("調整系統設定與檢視使用者狀態")
@@ -783,8 +753,8 @@ elif menu_option == "📝 開始解題":
                     )
                 else:
                     st.error(
-                        "❌ 無法取得有效答案，請檢查 Streamlit Secrets 中的 API"
-                        " Key 設定。"
+                        "❌ 無法取得有效答案，請檢查 Secrets 中的 API Key"
+                        " 設定。"
                     )
 
                 res_col1, res_col2, res_col3 = st.columns(3)
