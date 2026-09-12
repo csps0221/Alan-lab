@@ -52,21 +52,21 @@ THEMES = {
 if "history_logs" not in st.session_state:
     st.session_state.history_logs = []
 
-# 初始化 AI 模型選單與啟用開關
-if "selected_gemini_model" not in st.session_state:
-    st.session_state.selected_gemini_model = "gemini-2.5-flash"
-if "selected_openai_model" not in st.session_state:
+# 初始化 AI 模型選單與啟用開關（更新正確的官方模型名稱）
+MODEL_OPTIONS = {
+    "Gemini": ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
+    "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+}
+
+if "selected_gemini_model" not in st.session_state or st.session_state.selected_gemini_model not in MODEL_OPTIONS["Gemini"]:
+    st.session_state.selected_gemini_model = "gemini-1.5-flash"
+if "selected_openai_model" not in st.session_state or st.session_state.selected_openai_model not in MODEL_OPTIONS["ChatGPT"]:
     st.session_state.selected_openai_model = "gpt-4o-mini"
 
 if "enable_gemini" not in st.session_state:
     st.session_state.enable_gemini = True
 if "enable_openai" not in st.session_state:
     st.session_state.enable_openai = True
-
-MODEL_OPTIONS = {
-    "Gemini": ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
-    "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
-}
 
 # ==========================================
 # 1. 帳號與 Session 狀態管理
@@ -348,6 +348,7 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
+        # 先嘗試使用者選定的模型，若失敗則依序嘗試其他有效模型
         models_to_try = [st.session_state.selected_gemini_model] + [
             m for m in MODEL_OPTIONS["Gemini"] if m != st.session_state.selected_gemini_model
         ]
@@ -378,33 +379,29 @@ def call_gemini(question_text):
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        last_error = ""
-        models_to_try = [st.session_state.selected_gemini_model] + [
-            m for m in MODEL_OPTIONS["Gemini"] if m != st.session_state.selected_gemini_model
-        ]
-        for model_name in models_to_try:
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=f"{SYSTEM_PROMPT}\n\n題目：{question_text}",
-                )
-                if response and response.text:
-                    return response.text
-            except Exception as err:
-                last_error = str(err)
-                continue
+        selected_model = st.session_state.selected_gemini_model
+        
+        # 呼叫指定的 Gemini 模型
+        response = client.models.generate_content(
+            model=selected_model,
+            contents=f"{SYSTEM_PROMPT}\n\n題目：{question_text}",
+        )
+        if response and response.text:
+            return response.text
+
         return json.dumps(
             {
                 "ans": "失敗",
-                "reasoning": (
-                    f"Gemini API 呼叫失敗 ({st.session_state.selected_gemini_model}): {last_error}。"
-                ),
+                "reasoning": f"Gemini API 呼叫無回應 ({selected_model})。",
             },
             ensure_ascii=False,
         )
     except Exception as e:
         return json.dumps(
-            {"ans": "失敗", "reasoning": f"Gemini 初始化失敗: {str(e)}"},
+            {
+                "ans": "失敗",
+                "reasoning": f"Gemini API 呼叫失敗 ({st.session_state.selected_gemini_model}): {str(e)}",
+            },
             ensure_ascii=False,
         )
 
