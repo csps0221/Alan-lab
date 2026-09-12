@@ -111,6 +111,8 @@ THEMES = {
         "input_bg": "#12161F",
         "input_text": "#FFFFFF",
         "border": "#2D3545",
+        "card_gemini": "#16233B",
+        "card_openai": "#122B22",
     },
     "極簡純黑": {
         "bg": "#000000",
@@ -123,6 +125,8 @@ THEMES = {
         "input_bg": "#1F1F1F",
         "input_text": "#FFFFFF",
         "border": "#2A2A2A",
+        "card_gemini": "#181824",
+        "card_openai": "#14241B",
     },
     "深邃石墨": {
         "bg": "#1A1C1E",
@@ -135,6 +139,8 @@ THEMES = {
         "input_bg": "#22252A",
         "input_text": "#FFFFFF",
         "border": "#373D45",
+        "card_gemini": "#212D40",
+        "card_openai": "#1D332A",
     },
 }
 
@@ -271,7 +277,7 @@ else:
 
 t = THEMES[selected_theme]
 
-# CSS 注入
+# CSS 注入 (恢復色彩與卡片美化)
 st.markdown(
     f"""
 <style>
@@ -313,9 +319,17 @@ st.markdown(
         margin-bottom: 8px !important;
     }}
     
-    .ai-card {{
-        background-color: {t["card_bg"]};
-        border: 1px solid {t["border"]};
+    /* 🌟 AI 卡片專屬顏色 */
+    .ai-card-gemini {{
+        background-color: {t["card_gemini"]};
+        border: 1px solid #2B4C7E;
+        border-radius: 10px;
+        padding: 16px;
+        margin-top: 10px;
+    }}
+    .ai-card-openai {{
+        background-color: {t["card_openai"]};
+        border: 1px solid #235D43;
         border-radius: 10px;
         padding: 16px;
         margin-top: 10px;
@@ -402,14 +416,13 @@ with top_col1:
 st.divider()
 
 # ==========================================
-# 2. AI 引擎與 國中課綱專屬 Prompt
+# 2. AI 引擎與 Prompt
 # ==========================================
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
 
 
 def build_system_prompt(mode="full"):
-  """建構適應臺灣國中自然科課綱與雙模式的 Prompt"""
   mode_instruction = ""
   if mode == "hint":
     mode_instruction = """
@@ -521,9 +534,32 @@ def parse_ai_json(raw_text):
 # 3. 頁面分流與功能渲染
 # ==========================================
 
-# ⚙️ 系統管理後台
+# ⚙️ 系統管理後台 (補回使用者新增功能)
 if menu_option == "⚙️ 系統管理":
   st.title("⚙️ 管理員控制後台")
+
+  # 🌟 補回：新增使用者帳號模組
+  st.subheader("➕ 新增使用者帳號")
+  col_u1, col_u2 = st.columns([3, 1])
+  new_username = col_u1.text_input(
+      "學生/使用者姓名", placeholder="例如：李小明", key="add_user_input"
+  )
+  if col_u2.button("➕ 建立帳號"):
+    if new_username.strip():
+      u_name_clean = new_username.strip()
+      if u_name_clean in st.session_state.users_db:
+        st.error("⚠️ 該使用者姓名已存在！")
+      else:
+        st.session_state.users_db[u_name_clean] = {
+            "password": DEFAULT_USER_PASSWORD,
+            "first_login": True,
+            "used_today": 0,
+        }
+        save_config_from_session()
+        st.success(f"🎉 已成功建立帳號：{u_name_clean} (預設密碼：2580)")
+        st.rerun()
+
+  st.divider()
 
   st.subheader("📚 科目管理")
   col_s1, col_s2 = st.columns([3, 1])
@@ -561,7 +597,7 @@ if menu_option == "⚙️ 系統管理":
   st.divider()
   st.subheader("📋 使用者帳號管理")
   for u_name, info in list(st.session_state.users_db.items()):
-    col_a, col_b, col_c, col_d = st.columns([2, 2, 2, 1])
+    col_a, col_b, col_c, col_d, col_e = st.columns([2, 2, 2, 2, 1])
     col_a.write(f"**{u_name}**")
     col_b.write(f"已用: `{info.get('used_today', 0)}` 題")
     if col_c.button("🔄 重置題數", key=f"reset_{u_name}"):
@@ -569,7 +605,12 @@ if menu_option == "⚙️ 系統管理":
       save_config_from_session()
       st.toast("已重置題數")
       st.rerun()
-    if col_d.button("🗑️", key=f"del_{u_name}"):
+    if col_d.button("🔑 重設密碼", key=f"pwd_{u_name}"):
+      st.session_state.users_db[u_name]["password"] = DEFAULT_USER_PASSWORD
+      st.session_state.users_db[u_name]["first_login"] = True
+      save_config_from_session()
+      st.toast("已重置為預設密碼 2580")
+    if col_e.button("🗑️", key=f"del_{u_name}"):
       del st.session_state.users_db[u_name]
       save_config_from_session()
       st.rerun()
@@ -609,11 +650,9 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
   if not logs:
     st.info("尚無任何解題紀錄！")
   else:
-    # 🌟 錯題本匯出模組 🌟
     st.subheader("📥 匯出個人錯題本")
     col_exp1, col_exp2 = st.columns(2)
 
-    # 1. 匯出 Markdown 格式 (適合觀看與筆記)
     md_content = "# 📖 國中自然科會考錯題複習集\n\n"
     for idx, item in enumerate(logs, 1):
       md_content += f"## 第 {idx} 題 [{item['subject']}]\n"
@@ -630,7 +669,6 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
         use_container_width=True,
     )
 
-    # 2. 匯出 CSV 格式 (適合 Excel 整理)
     df_logs = pd.DataFrame(logs)
     csv_data = df_logs.to_csv(index=False).encode("utf-8-sig")
     col_exp2.download_button(
@@ -643,7 +681,6 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
 
     st.divider()
 
-    # 展示歷史紀錄
     for item in reversed(logs):
       with st.expander(
           f"📌 [{item['time']}] {item['subject']} - 答案：{item['ans']}"
@@ -702,7 +739,6 @@ elif menu_option == "📝 開始解題":
   col_m1, col_m2 = st.columns(2)
   subject = col_m1.selectbox("科目", st.session_state.subjects)
 
-  # 🌟 學習模式選擇 🌟
   solve_mode = col_m2.radio(
       "解題模式",
       ["🎯 完整解析 (直接給答案)", "💡 引導模式 (給提示不給答案)"],
@@ -821,7 +857,7 @@ elif menu_option == "📝 開始解題":
               "💡 **目前為【引導模式】，請閱讀以下關鍵提示後試著自己解答！**"
           )
 
-        # 兩欄呈現解析
+        # 🌟 補回：兩欄顏色卡片渲染 🌟
         cols = st.columns(
             sum([
                 st.session_state.enable_gemini,
@@ -832,22 +868,40 @@ elif menu_option == "📝 開始解題":
 
         if st.session_state.enable_gemini:
           with cols[c_idx]:
-            st.markdown(
-                f"### 🤖 Gemini ({st.session_state.selected_gemini_model})"
+            ans_html = (
+                f"<p><b>答案</b>：<code"
+                f' style="font-size:18px;">{g_ans}</code></p><hr'
+                f' style="border-color:{t["border"]};">'
+                if mode_key == "full"
+                else ""
             )
-            if mode_key == "full":
-              st.markdown(f"**答案**：`{g_ans}`")
-            st.markdown(g_reason)
+            st.markdown(
+                f"""<div class="ai-card-gemini">
+              <h3 style="color:#7EA6E0 !important;">🤖 Gemini ({st.session_state.selected_gemini_model})</h3>
+              {ans_html}
+              <div>{g_reason}</div>
+            </div>""",
+                unsafe_allow_html=True,
+            )
             c_idx += 1
 
         if st.session_state.enable_openai:
           with cols[c_idx]:
-            st.markdown(
-                f"### 🟢 ChatGPT ({st.session_state.selected_openai_model})"
+            ans_html = (
+                f"<p><b>答案</b>：<code"
+                f' style="font-size:18px;">{c_ans}</code></p><hr'
+                f' style="border-color:{t["border"]};">'
+                if mode_key == "full"
+                else ""
             )
-            if mode_key == "full":
-              st.markdown(f"**答案**：`{c_ans}`")
-            st.markdown(c_reason)
+            st.markdown(
+                f"""<div class="ai-card-openai">
+              <h3 style="color:#63E6BE !important;">🟢 ChatGPT ({st.session_state.selected_openai_model})</h3>
+              {ans_html}
+              <div>{c_reason}</div>
+            </div>""",
+                unsafe_allow_html=True,
+            )
 
   # 錯誤回報 Drawer
   st.divider()
