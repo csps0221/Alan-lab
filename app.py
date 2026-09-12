@@ -10,9 +10,74 @@ import streamlit as st
 from streamlit_cropper import st_cropper
 
 # ==========================================
-# 0. 系統初始化與主題配色設定
+# 0. 設定檔存取機制 (Json 本地資料庫)
+# ==========================================
+CONFIG_FILE = "config.json"
+
+DEFAULT_CONFIG = {
+    "daily_limit": 5,
+    "selected_gemini_model": "gemini-2.0-flash",
+    "selected_openai_model": "gpt-4o-mini",
+    "enable_gemini": True,
+    "enable_openai": True,
+    "users_db": {
+        "王小明": {
+            "password": "2580",
+            "first_login": True,
+            "used_today": 0,
+        },
+        "張小華": {
+            "password": "2580",
+            "first_login": True,
+            "used_today": 0,
+        },
+        "測試使用者": {
+            "password": "2580",
+            "first_login": True,
+            "used_today": 0,
+        },
+    },
+}
+
+
+def load_config():
+    """載入設定檔，若不存在則建立預設檔"""
+    if not os.path.exists(CONFIG_FILE):
+        save_config(DEFAULT_CONFIG)
+        return DEFAULT_CONFIG
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return DEFAULT_CONFIG
+
+
+def save_config_from_session():
+    """將目前的 Session 狀態同步儲存至 json 檔案"""
+    config_data = {
+        "daily_limit": st.session_state.daily_limit,
+        "selected_gemini_model": st.session_state.selected_gemini_model,
+        "selected_openai_model": st.session_state.selected_openai_model,
+        "enable_gemini": st.session_state.enable_gemini,
+        "enable_openai": st.session_state.enable_openai,
+        "users_db": st.session_state.users_db,
+    }
+    save_config(config_data)
+
+
+def save_config(config_data):
+    """寫入 json 檔案"""
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config_data, f, ensure_ascii=False, indent=4)
+
+
+# ==========================================
+# 1. 系統初始化與主題配色設定
 # ==========================================
 st.set_page_config(page_title="A.lab 解題實驗室", layout="centered")
+
+# 首次執行時讀取設定檔
+config = load_config()
 
 THEMES = {
     "全黑夜間": {
@@ -52,57 +117,29 @@ THEMES = {
 if "history_logs" not in st.session_state:
     st.session_state.history_logs = []
 
-# AI 模型選項 (更新為新版 Gemini 模型，預設使用 2.0-flash 避免 404)
 MODEL_OPTIONS = {
     "Gemini": ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
     "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
 }
 
-if (
-    "selected_gemini_model" not in st.session_state
-    or st.session_state.selected_gemini_model not in MODEL_OPTIONS["Gemini"]
-):
-    st.session_state.selected_gemini_model = "gemini-2.0-flash"
-
-if (
-    "selected_openai_model" not in st.session_state
-    or st.session_state.selected_openai_model not in MODEL_OPTIONS["ChatGPT"]
-):
-    st.session_state.selected_openai_model = "gpt-4o-mini"
-
-if "enable_gemini" not in st.session_state:
-    st.session_state.enable_gemini = True
-if "enable_openai" not in st.session_state:
-    st.session_state.enable_openai = True
-
-# ==========================================
-# 1. 帳號與 Session 狀態管理
-# ==========================================
-ADMIN_USER = "Alan2580"
-ADMIN_PASSWORD = "csps106121"
-DEFAULT_USER_PASSWORD = "2580"
-
+# 從 json 設定初始化狀態
 if "daily_limit" not in st.session_state:
-    st.session_state.daily_limit = 5
+    st.session_state.daily_limit = config.get("daily_limit", 5)
 
 if "users_db" not in st.session_state:
-    st.session_state.users_db = {
-        "王小明": {
-            "password": DEFAULT_USER_PASSWORD,
-            "first_login": True,
-            "used_today": 0,
-        },
-        "張小華": {
-            "password": DEFAULT_USER_PASSWORD,
-            "first_login": True,
-            "used_today": 0,
-        },
-        "測試使用者": {
-            "password": DEFAULT_USER_PASSWORD,
-            "first_login": True,
-            "used_today": 0,
-        },
-    }
+    st.session_state.users_db = config.get("users_db", DEFAULT_CONFIG["users_db"])
+
+if "selected_gemini_model" not in st.session_state:
+    st.session_state.selected_gemini_model = config.get("selected_gemini_model", "gemini-2.0-flash")
+
+if "selected_openai_model" not in st.session_state:
+    st.session_state.selected_openai_model = config.get("selected_openai_model", "gpt-4o-mini")
+
+if "enable_gemini" not in st.session_state:
+    st.session_state.enable_gemini = config.get("enable_gemini", True)
+
+if "enable_openai" not in st.session_state:
+    st.session_state.enable_openai = config.get("enable_openai", True)
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -112,6 +149,11 @@ if "user_name" not in st.session_state:
     st.session_state.user_name = ""
 if "must_change_password" not in st.session_state:
     st.session_state.must_change_password = False
+
+# --- 帳號設定 ---
+ADMIN_USER = "Alan2580"
+ADMIN_PASSWORD = "csps106121"
+DEFAULT_USER_PASSWORD = "2580"
 
 # --- 側邊選單 ---
 if st.session_state.logged_in:
@@ -133,34 +175,48 @@ if st.session_state.logged_in:
             "功能導航", menu_options, index=0, label_visibility="collapsed"
         )
 
-        # 管理員模型開關與版本切換
+        # 管理員模型開關與版本切換 (變更後自動存檔)
         if st.session_state.user_role == "admin":
             st.divider()
             st.subheader("🤖 AI 模型開關與版本控制")
 
-            st.session_state.enable_gemini = st.checkbox(
+            g_chk = st.checkbox(
                 "啟用 Gemini 模型", value=st.session_state.enable_gemini
             )
+            if g_chk != st.session_state.enable_gemini:
+                st.session_state.enable_gemini = g_chk
+                save_config_from_session()
+
             if st.session_state.enable_gemini:
-                st.session_state.selected_gemini_model = st.selectbox(
+                g_sel = st.selectbox(
                     "Gemini 模型版本",
                     MODEL_OPTIONS["Gemini"],
                     index=MODEL_OPTIONS["Gemini"].index(
                         st.session_state.selected_gemini_model
                     ),
                 )
+                if g_sel != st.session_state.selected_gemini_model:
+                    st.session_state.selected_gemini_model = g_sel
+                    save_config_from_session()
 
-            st.session_state.enable_openai = st.checkbox(
+            o_chk = st.checkbox(
                 "啟用 ChatGPT 模型", value=st.session_state.enable_openai
             )
+            if o_chk != st.session_state.enable_openai:
+                st.session_state.enable_openai = o_chk
+                save_config_from_session()
+
             if st.session_state.enable_openai:
-                st.session_state.selected_openai_model = st.selectbox(
+                o_sel = st.selectbox(
                     "ChatGPT 模型版本",
                     MODEL_OPTIONS["ChatGPT"],
                     index=MODEL_OPTIONS["ChatGPT"].index(
                         st.session_state.selected_openai_model
                     ),
                 )
+                if o_sel != st.session_state.selected_openai_model:
+                    st.session_state.selected_openai_model = o_sel
+                    save_config_from_session()
 
         st.divider()
         st.subheader("🎨 視覺主題設定")
@@ -318,6 +374,7 @@ if st.session_state.must_change_password:
             st.session_state.users_db[u_name]["password"] = pwd1
             st.session_state.users_db[u_name]["first_login"] = False
             st.session_state.must_change_password = False
+            save_config_from_session()  # 儲存修改後的密碼
             st.success("🎉 密碼修改成功！即將進入系統...")
             st.rerun()
     st.stop()
@@ -364,8 +421,6 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
         clean_model = st.session_state.selected_gemini_model.replace("models/", "")
-        
-        # 使用更新後的備用模型清單
         models_to_try = [clean_model, "gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
         
         for model_name in models_to_try:
@@ -396,8 +451,6 @@ def call_gemini(question_text):
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
         clean_model = st.session_state.selected_gemini_model.replace("models/", "")
-        
-        # 優先使用選擇的模型，若遇 404 則自動嘗試 2.0-flash 或 2.5-flash
         models_to_try = [clean_model, "gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
         last_err = ""
 
@@ -495,7 +548,7 @@ def parse_ai_json(raw_text):
 # 3. 頁面渲染分流
 # ==========================================
 
-# ⚙️ 獨立頁面 1：管理員後台控制頁面
+# ⚙️ 頁面 1：管理員後台控制頁面
 if menu_option == "⚙️ 系統管理":
     st.title("⚙️ 管理員控制後台")
     st.caption("調整系統設定與檢視使用者狀態")
@@ -503,13 +556,17 @@ if menu_option == "⚙️ 系統管理":
     st.subheader("🤖 當前使用的 AI 模型關閉與版本控制")
     mod_col1, mod_col2 = st.columns(2)
     with mod_col1:
-        st.session_state.enable_gemini = st.checkbox(
+        g_check = st.checkbox(
             "啟用 Gemini 模型",
             value=st.session_state.enable_gemini,
             key="admin_gemini_chk",
         )
+        if g_check != st.session_state.enable_gemini:
+            st.session_state.enable_gemini = g_check
+            save_config_from_session()
+
         if st.session_state.enable_gemini:
-            st.session_state.selected_gemini_model = st.selectbox(
+            g_sel_val = st.selectbox(
                 "Gemini 模型選擇",
                 MODEL_OPTIONS["Gemini"],
                 index=MODEL_OPTIONS["Gemini"].index(
@@ -517,14 +574,22 @@ if menu_option == "⚙️ 系統管理":
                 ),
                 key="admin_gemini_sel",
             )
+            if g_sel_val != st.session_state.selected_gemini_model:
+                st.session_state.selected_gemini_model = g_sel_val
+                save_config_from_session()
+
     with mod_col2:
-        st.session_state.enable_openai = st.checkbox(
+        o_check = st.checkbox(
             "啟用 ChatGPT 模型",
             value=st.session_state.enable_openai,
             key="admin_openai_chk",
         )
+        if o_check != st.session_state.enable_openai:
+            st.session_state.enable_openai = o_check
+            save_config_from_session()
+
         if st.session_state.enable_openai:
-            st.session_state.selected_openai_model = st.selectbox(
+            o_sel_val = st.selectbox(
                 "ChatGPT 模型選擇",
                 MODEL_OPTIONS["ChatGPT"],
                 index=MODEL_OPTIONS["ChatGPT"].index(
@@ -532,6 +597,9 @@ if menu_option == "⚙️ 系統管理":
                 ),
                 key="admin_openai_sel",
             )
+            if o_sel_val != st.session_state.selected_openai_model:
+                st.session_state.selected_openai_model = o_sel_val
+                save_config_from_session()
 
     st.divider()
     st.subheader("🎯 每日提問額度設定")
@@ -543,7 +611,8 @@ if menu_option == "⚙️ 系統管理":
     )
     if st.button("更新預設每日題數上限"):
         st.session_state.daily_limit = new_limit
-        st.success(f"已將每日提問上限更新為：{new_limit} 題")
+        save_config_from_session()  # 寫入設定檔
+        st.success(f"已將每日提問上限更新為：{new_limit} 題，並完成存檔！")
         st.rerun()
 
     st.divider()
@@ -561,8 +630,9 @@ if menu_option == "⚙️ 系統管理":
                 "first_login": True,
                 "used_today": 0,
             }
+            save_config_from_session()  # 自動存檔至 json
             st.success(
-                f"已成功新增使用者：{new_name}（預設密碼：{new_pass}）"
+                f"已成功新增使用者：{new_name}（預設密碼：{new_pass}），並完成存檔！"
             )
             st.rerun()
         else:
@@ -582,7 +652,8 @@ if menu_option == "⚙️ 系統管理":
 
         if col_c.button("🔄 重置題數", key=f"reset_limit_{u_name}"):
             st.session_state.users_db[u_name]["used_today"] = 0
-            st.toast(f"已重置 {u_name} 今日已用題數為 0！")
+            save_config_from_session()  # 自動存檔
+            st.toast(f"已重置 {u_name} 今日已用題數為 0，並存檔！")
             st.rerun()
 
         if col_d.button("🔑 還原密碼", key=f"reset_pwd_{u_name}"):
@@ -590,17 +661,19 @@ if menu_option == "⚙️ 系統管理":
                 DEFAULT_USER_PASSWORD
             )
             st.session_state.users_db[u_name]["first_login"] = True
+            save_config_from_session()  # 自動存檔
             st.toast(
-                f"已將 {u_name} 的密碼重置為 {DEFAULT_USER_PASSWORD}！"
+                f"已將 {u_name} 的密碼重置為 {DEFAULT_USER_PASSWORD}，並存檔！"
             )
             st.rerun()
 
         if col_e.button("🗑️", key=f"del_{u_name}"):
             del st.session_state.users_db[u_name]
-            st.toast(f"已刪除 {u_name}")
+            save_config_from_session()  # 自動存檔
+            st.toast(f"已刪除 {u_name}，並更新存檔！")
             st.rerun()
 
-# 📚 頁面 2：解題紀錄頁面 (包含下載存檔按鈕)
+# 📚 頁面 2：解題紀錄頁面
 elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
     title_text = (
         "📚 全站解題紀錄"
@@ -662,11 +735,9 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
 
         st.caption(f"共找到 **{len(filtered_logs)}** 筆符合條件的紀錄")
 
-        # 💾 儲存檔案按鈕專區 (提供 JSON 與 CSV 格式)
         if filtered_logs:
             dl_col1, dl_col2 = st.columns(2)
 
-            # JSON 下載
             json_data = json.dumps(filtered_logs, ensure_ascii=False, indent=2)
             dl_col1.download_button(
                 label="💾 存檔下載 (JSON 檔)",
@@ -676,7 +747,6 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
                 use_container_width=True,
             )
 
-            # CSV 下載
             df = pd.DataFrame(filtered_logs)
             csv_data = df.to_csv(index=False).encode("utf-8-sig")
             dl_col2.download_button(
@@ -819,6 +889,7 @@ elif menu_option == "📝 開始解題":
                     st.session_state.users_db[st.session_state.user_name][
                         "used_today"
                     ] += 1
+                    save_config_from_session()  # 使用次數增加時自動同步存檔
 
                 with st.status(
                     "🚀 實驗室正在解析題目與進行 AI 比對...", expanded=True
@@ -828,21 +899,18 @@ elif menu_option == "📝 開始解題":
 
                     st.write("🤖 **步驟 2**：啟用之 AI 模型平行呼叫中...")
 
-                    # Gemini 呼叫
                     if st.session_state.enable_gemini:
                         g_raw = call_gemini(q_text)
                         g_ans, g_reason = parse_ai_json(g_raw)
                     else:
                         g_ans, g_reason = "未啟用", "管理員已關閉此模型"
 
-                    # ChatGPT 呼叫
                     if st.session_state.enable_openai:
                         c_raw = call_chatgpt(q_text)
                         c_ans, c_reason = parse_ai_json(c_raw)
                     else:
                         c_ans, c_reason = "未啟用", "管理員已關閉此模型"
 
-                    # 選擇主要的顯示答案寫入紀錄
                     main_ans = g_ans if st.session_state.enable_gemini else c_ans
                     main_reason = (
                         g_reason if st.session_state.enable_gemini else c_reason
@@ -862,7 +930,6 @@ elif menu_option == "📝 開始解題":
 
                     status.update(label="🎉 解析完成！", state="complete")
 
-                # 動態比對答案
                 active_answers = []
                 if st.session_state.enable_gemini:
                     active_answers.append(g_ans)
@@ -893,7 +960,6 @@ elif menu_option == "📝 開始解題":
                         " 設定與剩餘額度。"
                     )
 
-                # 動態呈現結果欄位
                 enabled_count = sum(
                     [st.session_state.enable_gemini, st.session_state.enable_openai]
                 )
