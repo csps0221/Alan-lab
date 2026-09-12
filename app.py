@@ -18,34 +18,34 @@ THEMES = {
     "全黑夜間": {
         "bg": "#000000",
         "text": "#FFFFFF",
-        "primary": "#FFFFFF",
-        "primary_text": "#000000",
+        "primary": "#E53E3E",
         "card": "#121212",
         "sub_text": "#CCCCCC",
+        "sidebar_bg": "#121212",
     },
     "清霧白": {
         "bg": "#F8F9FA",
         "text": "#1A1A1A",
-        "primary": "#2D3748",
-        "primary_text": "#FFFFFF",
+        "primary": "#E53E3E",
         "card": "#FFFFFF",
         "sub_text": "#718096",
+        "sidebar_bg": "#EDF2F7",
     },
     "燕麥米": {
         "bg": "#F4F1EA",
         "text": "#3D3A36",
-        "primary": "#8C7A6B",
-        "primary_text": "#FFFFFF",
+        "primary": "#E53E3E",
         "card": "#FAF8F5",
         "sub_text": "#8A837A",
+        "sidebar_bg": "#EBE5DF",
     },
     "森林綠": {
         "bg": "#E8F0EC",
         "text": "#1C3326",
-        "primary": "#2D5A44",
-        "primary_text": "#FFFFFF",
+        "primary": "#E53E3E",
         "card": "#F2F7F4",
         "sub_text": "#5C7869",
+        "sidebar_bg": "#D5E3DB",
     },
 }
 
@@ -112,7 +112,7 @@ if st.session_state.logged_in:
     selected_theme = st.selectbox("選擇主題配色", list(THEMES.keys()), index=0)
 
     st.divider()
-    if st.button("🚪 登出", type="secondary", use_container_width=True):
+    if st.button("🚪 登出", use_container_width=True):
       st.session_state.logged_in = False
       st.session_state.user_role = ""
       st.session_state.user_name = ""
@@ -124,34 +124,55 @@ else:
 
 t = THEMES[selected_theme]
 
-# CSS 設定
+# 全局 CSS 注入與樣式整合
 st.markdown(
     f"""
 <style>
-    /* 全局背景與文字 */
-    .stApp, div[data-testid="stSidebar"] {{
+    /* 全局背景與主體顏色 */
+    .stApp {{
         background-color: {t["bg"]} !important;
         color: {t["text"]} !important;
     }}
+
+    /* 側邊欄背景與主題同步 */
+    section[data-testid="stSidebar"] {{
+        background-color: {t["sidebar_bg"]} !important;
+    }}
     
-    /* 所有文字圖層設置在最上層 */
-    p, span, h1, h2, h3, h4, h5, h6, label {{
+    /* 所有的標準文字、標題、標籤 */
+    p, span, h1, h2, h3, h4, h5, h6, label, div {{
         color: {t["text"]} !important;
-        position: relative;
-        z-index: 10;
     }}
 
-    /* 一般按鈕、選單等元件 */
-    div.stButton > button, 
-    div[data-baseweb="select"] > div, 
-    div[data-baseweb="popover"] *, 
-    ul[role="listbox"] li {{
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-        border-color: #FFFFFF !important;
+    /* 🔴 全站所有按鈕統一為紅色背景、白色文字 */
+    div.stButton > button,
+    button[data-testid="baseButton-secondary"],
+    button[data-testid="baseButton-primary"] {{
+        background-color: #E53E3E !important;
+        color: #FFFFFF !important;
+        border-color: #E53E3E !important;
+        font-weight: bold !important;
+        border-radius: 6px !important;
     }}
 
-    /* 🔵 帳號與密碼輸入框（深藍色背景、白色文字、深藍色邊框） */
+    /* 按鈕內部的文字強制改為白色 */
+    div.stButton > button *,
+    button * {{
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+    }}
+
+    /* 按鈕 Hover / Focus / Active 懸停效果 */
+    div.stButton > button:hover,
+    div.stButton > button:focus,
+    div.stButton > button:active {{
+        background-color: #C53030 !important;
+        border-color: #C53030 !important;
+        color: #FFFFFF !important;
+        box-shadow: none !important;
+    }}
+
+    /* 🔵 帳號、密碼、補充說明等輸入框：深藍背景、白字 */
     input, textarea, div[data-baseweb="input"] > div {{
         background-color: #1E3A8A !important;
         color: #FFFFFF !important;
@@ -159,49 +180,19 @@ st.markdown(
         border-color: #1E3A8A !important;
     }}
 
-    /* 🔴 專屬登入按鈕（高優先度設定：紅色背景、白色文字） */
-    div.login-btn-container button,
-    div.login-btn-container div.stButton > button {{
-        background-color: #E53E3E !important;
-        color: #FFFFFF !important;
-        border-color: #E53E3E !important;
-        font-weight: bold !important;
+    /* 🎨 選單與下拉選單（Selectbox & Radio）隨著主題動態變色 */
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="popover"] *,
+    ul[role="listbox"] li {{
+        background-color: {t["card"]} !important;
+        color: {t["text"]} !important;
+        border-color: {t["sub_text"]} !important;
     }}
 
-    /* 強制將登入按鈕內部的所有文字與圖層改為白色 */
-    div.login-btn-container button *,
-    div.login-btn-container button p,
-    div.login-btn-container button span {{
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }}
-
-    /* 登入按鈕 Hover/Active/Focus 狀態（保持紅底白字） */
-    div.login-btn-container button:hover,
-    div.login-btn-container button:active,
-    div.login-btn-container button:focus {{
-        background-color: #C53030 !important;
-        color: #FFFFFF !important;
-        border-color: #C53030 !important;
-        box-shadow: none !important;
-    }}
-
-    /* 取消一般元件滑鼠移過（Hover）的變色效果 */
-    div.stButton > button:hover,
-    div.stButton > button:active,
-    div.stButton > button:focus,
-    div[data-baseweb="select"] > div:hover,
-    ul[role="listbox"] li:hover {{
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-        border-color: #FFFFFF !important;
-        box-shadow: none !important;
-    }}
-
-    /* 步驟圖示 */
+    /* 步驟數字圓標 */
     .step-number {{
-        background-color: #FFFFFF;
-        color: #000000 !important;
+        background-color: #E53E3E;
+        color: #FFFFFF !important;
         border-radius: 50%;
         width: 28px;
         height: 28px;
@@ -242,10 +233,7 @@ if not st.session_state.logged_in:
   input_user = st.text_input("姓名 / 管理員帳號")
   input_password = st.text_input("密碼", type="password")
 
-  # 使用 div 包裹以套用專屬的紅色按鈕 CSS 樣式
-  st.markdown('<div class="login-btn-container">', unsafe_allow_html=True)
-  login_submitted = st.button("登入", type="primary", use_container_width=True)
-  st.markdown("</div>", unsafe_allow_html=True)
+  login_submitted = st.button("登入", use_container_width=True)
 
   if login_submitted:
     if input_user == ADMIN_USER and input_password == ADMIN_PASSWORD:
@@ -279,7 +267,7 @@ if st.session_state.must_change_password:
   pwd1 = st.text_input("請輸入新密碼", type="password")
   pwd2 = st.text_input("再次確認新密碼", type="password")
 
-  if st.button("確認更新密碼", type="primary"):
+  if st.button("確認更新密碼", use_container_width=True):
     if not pwd1 or not pwd2:
       st.error("請輸入完整密碼！")
     elif pwd1 != pwd2:
@@ -472,7 +460,7 @@ if menu_option == "⚙️ 系統管理":
       st.toast(f"已刪除 {u_name}")
       st.rerun()
 
-# 📚 頁面 2：解題紀錄頁面 (管理員可看所有人，一般使用者看自己)
+# 📚 頁面 2：解題紀錄頁面 (附帶科目與使用者雙重篩選功能)
 elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
   title_text = (
       "📚 全站解題紀錄"
@@ -483,30 +471,76 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
   st.caption("歷次檢索與解析紀錄匯總")
   st.divider()
 
+  # 獲取基礎資料
   if st.session_state.user_role == "admin":
-    logs_to_display = st.session_state.history_logs
+    base_logs = st.session_state.history_logs
   else:
-    logs_to_display = [
+    base_logs = [
         log
         for log in st.session_state.history_logs
         if log["user"] == st.session_state.user_name
     ]
 
-  if not logs_to_display:
-    st.info("目前尚無解題紀錄！")
+  if not base_logs:
+    st.info("目前尚無任何解題紀錄！")
   else:
-    for item in reversed(logs_to_display):
-      with st.expander(
-          f"📌 [{item['time']}] 使用者：{item['user']} | 科目：{item['subject']}"
-          f" - 答案：{item['ans']}"
-      ):
-        st.write(f"**提問人**：{item['user']}")
-        st.write(f"**提問時間**：{item['time']}")
-        st.write(f"**補充說明**：{item['extra_info'] or '無'}")
-        st.write("**解析說明**：")
-        st.write(item["reasoning"])
+    # 🔍 篩選條件設定區
+    st.subheader("🔍 條件篩選")
+    filter_col1, filter_col2 = st.columns(2)
 
-# 📝 頁面 3：開始解題頁面 (管理員不受額度限制)
+    # 提取獨立使用者與科目選項列表
+    available_users = ["全部使用者"] + list(
+        set([log["user"] for log in base_logs])
+    )
+    available_subjects = ["全部科目"] + list(
+        set([log["subject"] for log in base_logs])
+    )
+
+    with filter_col1:
+      # 管理員才可篩選使用者；一般使用者固定看自己
+      if st.session_state.user_role == "admin":
+        selected_user_filter = st.selectbox("選擇使用者", available_users)
+      else:
+        selected_user_filter = st.session_state.user_name
+
+    with filter_col2:
+      selected_subject_filter = st.selectbox(
+          "選擇科目", available_subjects
+      )
+
+    # 執行篩選邏輯
+    filtered_logs = base_logs
+    if selected_user_filter != "全部使用者":
+      filtered_logs = [
+          log for log in filtered_logs if log["user"] == selected_user_filter
+      ]
+
+    if selected_subject_filter != "全部科目":
+      filtered_logs = [
+          log
+          for log in filtered_logs
+          if log["subject"] == selected_subject_filter
+      ]
+
+    st.caption(f"共找到 **{len(filtered_logs)}** 筆符合條件的紀錄")
+    st.divider()
+
+    if not filtered_logs:
+      st.warning("沒有找到符合選取條件的紀錄。")
+    else:
+      for item in reversed(filtered_logs):
+        with st.expander(
+            f"📌 [{item['time']}] 使用者：{item['user']} | 科目：{item['subject']}"
+            f" - 答案：{item['ans']}"
+        ):
+          st.write(f"**提問人**：{item['user']}")
+          st.write(f"**提問時間**：{item['time']}")
+          st.write(f"**科目**：{item['subject']}")
+          st.write(f"**補充說明**：{item['extra_info'] or '無'}")
+          st.write("**解析說明**：")
+          st.write(item["reasoning"])
+
+# 📝 頁面 3：開始解題頁面 (管理員與一般使用者皆會儲存紀錄)
 else:
   st.caption("A.LAB")
   st.title("自然科解題實驗室")
@@ -543,7 +577,7 @@ else:
           cropped_img = st_cropper(
               raw_img,
               realtime_update=True,
-              box_color="#FFFFFF",
+              box_color="#E53E3E",
               key=f"crop_{idx}",
           )
           st.session_state.cropped_images[idx] = cropped_img
@@ -569,7 +603,7 @@ else:
 
   col_btn1, col_btn2 = st.columns(2)
   with col_btn1:
-    start_btn = st.button("開始解題", type="primary", use_container_width=True)
+    start_btn = st.button("開始解題", use_container_width=True)
   with col_btn2:
     clear_btn = st.button("清除目前題目", use_container_width=True)
 
@@ -587,7 +621,7 @@ else:
   if start_btn:
     can_submit = True
 
-    # 提問限制判斷：只有一般使用者受限，管理員 (admin) 完全不受限制
+    # 提問限制判斷：一般使用者受到每日額度限制，管理員 (admin) 不受限制
     if st.session_state.user_role == "user":
       u_name = st.session_state.user_name
       used = st.session_state.users_db[u_name].get("used_today", 0)
@@ -613,7 +647,7 @@ else:
       if not final_images:
         st.warning("請先上傳至少一張題目圖片！")
       else:
-        # 一般使用者才進行計次扣除
+        # 一般使用者進行計次扣除
         if st.session_state.user_role == "user":
           st.session_state.users_db[st.session_state.user_name][
               "used_today"
@@ -636,7 +670,7 @@ else:
           c_ans, c_reason = parse_ai_json(c_raw)
           cl_ans, cl_reason = parse_ai_json(cl_raw)
 
-          # 紀錄所有提問 (方便管理員於後台查看)
+          # 自動記錄解題紀錄（無論是管理員還是一般使用者均會寫入）
           now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
           st.session_state.history_logs.append({
               "user": st.session_state.user_name,
@@ -670,6 +704,10 @@ else:
           st.subheader("🟣 Claude")
           st.write(f"**答案**：`{cl_ans}`")
           st.write(cl_reason)
+  else:
+    st.info(
+        "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
+    )
   else:
     st.info(
         "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
