@@ -124,7 +124,7 @@ else:
 
 t = THEMES[selected_theme]
 
-# CSS 設定：初始頁面全黑、文字全白、選項/按鈕為白底黑字，且登入按鈕為紅色
+# CSS 設定
 st.markdown(
     f"""
 <style>
@@ -141,16 +141,22 @@ st.markdown(
         z-index: 10;
     }}
 
-    /* 一般按鈕、輸入框、選單等元件：背景白色，文字永遠為黑色 */
+    /* 一般按鈕、選單等元件 */
     div.stButton > button, 
     div[data-baseweb="select"] > div, 
-    input, 
-    textarea, 
     div[data-baseweb="popover"] *, 
     ul[role="listbox"] li {{
         background-color: #FFFFFF !important;
         color: #000000 !important;
         border-color: #FFFFFF !important;
+    }}
+
+    /* 🔵 帳號與密碼輸入框（改為深藍色背景、白色文字、深藍色邊框） */
+    input, textarea, div[data-baseweb="input"] > div {{
+        background-color: #1E3A8A !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        border-color: #1E3A8A !important;
     }}
 
     /* 🔴 專屬登入按鈕（紅色背景、白色文字、滑鼠移過不變色） */
@@ -167,12 +173,6 @@ st.markdown(
         color: #FFFFFF !important;
         border-color: #E53E3E !important;
         box-shadow: none !important;
-    }}
-
-    /* 確保輸入框與選單內的文字為純黑 */
-    div[data-baseweb="select"] span, input, textarea {{
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
     }}
 
     /* 取消一般元件滑鼠移過（Hover）的變色效果 */
@@ -660,9 +660,6 @@ else:
           st.write(f"**答案**：`{cl_ans}`")
           st.write(cl_reason)
   else:
-    st.info(
-        "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
-    )
     st.info(
         "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
     )
