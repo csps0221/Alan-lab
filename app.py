@@ -124,7 +124,7 @@ else:
 
 t = THEMES[selected_theme]
 
-# CSS 設定：初始頁面全黑、文字全白、選項/按鈕為白底黑字，且滑鼠移過不變色
+# CSS 設定：初始頁面全黑、文字全白、選項/按鈕為白底黑字，且登入按鈕為紅色
 st.markdown(
     f"""
 <style>
@@ -141,7 +141,7 @@ st.markdown(
         z-index: 10;
     }}
 
-    /* 按鈕、輸入框、選單等元件：背景白色，文字永遠為黑色 */
+    /* 一般按鈕、輸入框、選單等元件：背景白色，文字永遠為黑色 */
     div.stButton > button, 
     div[data-baseweb="select"] > div, 
     input, 
@@ -153,13 +153,29 @@ st.markdown(
         border-color: #FFFFFF !important;
     }}
 
+    /* 🔴 專屬登入按鈕（紅色背景、白色文字、滑鼠移過不變色） */
+    div.login-btn-container button {{
+        background-color: #E53E3E !important;
+        color: #FFFFFF !important;
+        border-color: #E53E3E !important;
+        font-weight: bold !important;
+    }}
+    div.login-btn-container button:hover,
+    div.login-btn-container button:active,
+    div.login-btn-container button:focus {{
+        background-color: #E53E3E !important;
+        color: #FFFFFF !important;
+        border-color: #E53E3E !important;
+        box-shadow: none !important;
+    }}
+
     /* 確保輸入框與選單內的文字為純黑 */
     div[data-baseweb="select"] span, input, textarea {{
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
     }}
 
-    /* 取消滑鼠移過（Hover）的變色效果，保持原本顏色 */
+    /* 取消一般元件滑鼠移過（Hover）的變色效果 */
     div.stButton > button:hover,
     div.stButton > button:active,
     div.stButton > button:focus,
@@ -215,7 +231,12 @@ if not st.session_state.logged_in:
   input_user = st.text_input("姓名 / 管理員帳號")
   input_password = st.text_input("密碼", type="password")
 
-  if st.button("登入", type="primary", use_container_width=True):
+  # 使用 div 包裹以套用專屬的紅色按鈕 CSS 樣式
+  st.markdown('<div class="login-btn-container">', unsafe_allow_html=True)
+  login_submitted = st.button("登入", type="primary", use_container_width=True)
+  st.markdown("</div>", unsafe_allow_html=True)
+
+  if login_submitted:
     if input_user == ADMIN_USER and input_password == ADMIN_PASSWORD:
       st.session_state.logged_in = True
       st.session_state.user_role = "admin"
@@ -639,6 +660,9 @@ else:
           st.write(f"**答案**：`{cl_ans}`")
           st.write(cl_reason)
   else:
+    st.info(
+        "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
+    )
     st.info(
         "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
     )
