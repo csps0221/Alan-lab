@@ -504,9 +504,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
         selected_user_filter = st.session_state.user_name
 
     with filter_col2:
-      selected_subject_filter = st.selectbox(
-          "選擇科目", available_subjects
-      )
+      selected_subject_filter = st.selectbox("選擇科目", available_subjects)
 
     # 執行篩選邏輯
     filtered_logs = base_logs
