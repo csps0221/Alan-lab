@@ -59,9 +59,76 @@ THEMES = {
     },
 }
 
-with st.sidebar:
-  st.header("🎨 視覺主題")
-  selected_theme = st.selectbox("選擇主題配色", list(THEMES.keys()), index=0)
+# 全局紀錄初始化
+if "history_logs" not in st.session_state:
+  st.session_state.history_logs = []
+
+# ==========================================
+# 1. 帳號與 Session 狀態管理
+# ==========================================
+ADMIN_USER = "Alan2580"
+ADMIN_PASSWORD = "csps106121"
+DEFAULT_USER_PASSWORD = "2580"
+
+if "daily_limit" not in st.session_state:
+  st.session_state.daily_limit = 5
+
+if "users_db" not in st.session_state:
+  st.session_state.users_db = {
+      "王小明": {
+          "password": DEFAULT_USER_PASSWORD,
+          "first_login": True,
+          "used_today": 0,
+      },
+      "張小華": {
+          "password": DEFAULT_USER_PASSWORD,
+          "first_login": True,
+          "used_today": 0,
+      },
+      "測試使用者": {
+          "password": DEFAULT_USER_PASSWORD,
+          "first_login": True,
+          "used_today": 0,
+      },
+  }
+
+if "logged_in" not in st.session_state:
+  st.session_state.logged_in = False
+if "user_role" not in st.session_state:
+  st.session_state.user_role = ""
+if "user_name" not in st.session_state:
+  st.session_state.user_name = ""
+if "must_change_password" not in st.session_state:
+  st.session_state.must_change_password = False
+
+# --- 側邊選單（三條線選單概念） ---
+if st.session_state.logged_in:
+  with st.sidebar:
+    st.title("☰ 選單")
+    st.write(f"👤 **{st.session_state.user_name}**")
+    st.divider()
+
+    menu_option = st.radio(
+        "功能導航",
+        ["開始解題", "我的解題紀錄"],
+        index=0,
+        label_visibility="collapsed",
+    )
+
+    st.divider()
+    st.subheader("🎨 視覺主題設定")
+    selected_theme = st.selectbox("選擇主題配色", list(THEMES.keys()), index=0)
+
+    st.divider()
+    if st.button("🚪 登出", type="secondary", use_container_width=True):
+      st.session_state.logged_in = False
+      st.session_state.user_role = ""
+      st.session_state.user_name = ""
+      st.session_state.must_change_password = False
+      st.rerun()
+else:
+  selected_theme = "清霧白"
+  menu_option = "開始解題"
 
 t = THEMES[selected_theme]
 
@@ -109,46 +176,6 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
-# ==========================================
-# 1. 帳號與 Session 狀態管理
-# ==========================================
-ADMIN_USER = "Alan2580"
-ADMIN_PASSWORD = "csps106121"
-DEFAULT_USER_PASSWORD = "2580"
-
-# 全局預設每日可提問次數
-if "daily_limit" not in st.session_state:
-  st.session_state.daily_limit = 5
-
-# 使用者資料庫結構: {"姓名": {"password": "密碼", "first_login": True/False, "used_today": 今日已提問數}}
-if "users_db" not in st.session_state:
-  st.session_state.users_db = {
-      "王小明": {
-          "password": DEFAULT_USER_PASSWORD,
-          "first_login": True,
-          "used_today": 0,
-      },
-      "張小華": {
-          "password": DEFAULT_USER_PASSWORD,
-          "first_login": True,
-          "used_today": 0,
-      },
-      "測試使用者": {
-          "password": DEFAULT_USER_PASSWORD,
-          "first_login": True,
-          "used_today": 0,
-      },
-  }
-
-if "logged_in" not in st.session_state:
-  st.session_state.logged_in = False
-if "user_role" not in st.session_state:
-  st.session_state.user_role = ""
-if "user_name" not in st.session_state:
-  st.session_state.user_name = ""
-if "must_change_password" not in st.session_state:
-  st.session_state.must_change_password = False
 
 # --- 登入畫面 ---
 if not st.session_state.logged_in:
@@ -219,21 +246,14 @@ with top_col1:
     limit = st.session_state.daily_limit
     remains = max(0, limit - used)
     st.caption(f"📊 今日提問額度：**{remains}/{limit}** 題（已用 {used} 題）")
-with top_col2:
-  if st.button("登出"):
-    st.session_state.logged_in = False
-    st.session_state.user_role = ""
-    st.session_state.user_name = ""
-    st.session_state.must_change_password = False
-    st.rerun()
 
 st.divider()
 
 # ==========================================
-# 👑 管理員後台：新增/重置/刪除使用者與額度管理
+# 👑 管理員後台
 # ==========================================
 if st.session_state.user_role == "admin":
-  with st.expander("⚙️ 管理員選單：使用者帳號與每日額度設定", expanded=True):
+  with st.expander("⚙️ 管理員選單：使用者帳號與每日額度設定", expanded=False):
     st.subheader("🎯 每日提問額度設定")
     new_limit = st.number_input(
         "全站使用者每日預設可提問數",
@@ -276,20 +296,17 @@ if st.session_state.user_role == "admin":
       used = info.get("used_today", 0)
       col_b.write(f"**今日使用**：`{used}/{st.session_state.daily_limit}` 題")
 
-      # 重置今日題數按鈕
       if col_c.button("🔄 重置題數", key=f"reset_limit_{u_name}"):
         st.session_state.users_db[u_name]["used_today"] = 0
         st.toast(f"已重置 {u_name} 今日已用題數為 0！")
         st.rerun()
 
-      # 還原密碼按鈕
       if col_d.button("🔑 還原密碼", key=f"reset_pwd_{u_name}"):
         st.session_state.users_db[u_name]["password"] = DEFAULT_USER_PASSWORD
         st.session_state.users_db[u_name]["first_login"] = True
         st.toast(f"已將 {u_name} 的密碼重置為 {DEFAULT_USER_PASSWORD}！")
         st.rerun()
 
-      # 刪除使用者按鈕
       if col_e.button("🗑️", key=f"del_{u_name}"):
         del st.session_state.users_db[u_name]
         st.toast(f"已刪除 {u_name}")
@@ -391,156 +408,199 @@ def parse_ai_json(raw_text):
 
 
 # ==========================================
-# 4. 主介面渲染 (解題實驗室)
+# 4. 主介面頁面渲染
 # ==========================================
-st.caption("A.LAB")
-st.title("自然科解題實驗室")
-st.caption("拆解步驟，訂正錯誤，清晰脈絡，梳理思路")
-st.divider()
 
-# --- 步驟 1：上傳題目圖片 ---
-st.markdown(
-    """
-<div class="step-header"><span class="step-number">1</span>上傳題目圖片</div>
-<div class="sub-text">可上傳 1~6 張，題目與解答皆可上傳</div>
-""",
-    unsafe_allow_html=True,
-)
+# 頁面 A：我的解題紀錄
+if menu_option == "我的解題紀錄":
+  st.title("📚 我的解題紀錄")
+  st.caption("歷次檢索與解析的紀錄匯總")
+  st.divider()
 
-uploaded_files = st.file_uploader(
-    "",
-    type=["png", "jpg", "jpeg"],
-    accept_multiple_files=True,
-    label_visibility="collapsed",
-)
+  user_history = [
+      log
+      for log in st.session_state.history_logs
+      if log["user"] == st.session_state.user_name
+      or st.session_state.user_role == "admin"
+  ]
 
-if "cropped_images" not in st.session_state:
-  st.session_state.cropped_images = {}
-
-if uploaded_files:
-  if len(uploaded_files) > 6:
-    st.error("⚠️ 最多上傳 6 張圖片！")
+  if not user_history:
+    st.info("目前尚無解題紀錄！")
   else:
-    tabs = st.tabs([f"圖片 {i+1}" for i in range(len(uploaded_files))])
-    for idx, file in enumerate(uploaded_files):
-      with tabs[idx]:
-        raw_img = Image.open(file)
-        cropped_img = st_cropper(
-            raw_img, realtime_update=True, box_color="#000000", key=f"crop_{idx}"
+    for idx, item in enumerate(reversed(user_history)):
+      with st.expander(
+          f"📌 [{item['time']}] 科目：{item['subject']} - 答案：{item['ans']}"
+      ):
+        st.write(f"**提問使用者**：{item['user']}")
+        st.write(f"**補充說明**：{item['extra_info'] or '無'}")
+        st.write("**解析說明**：")
+        st.write(item["reasoning"])
+
+# 頁面 B：開始解題
+else:
+  st.caption("A.LAB")
+  st.title("自然科解題實驗室")
+  st.caption("拆解步驟，訂正錯誤，清晰脈絡，梳理思路")
+  st.divider()
+
+  # --- 步驟 1：上傳題目圖片 ---
+  st.markdown(
+      """
+    <div class="step-header"><span class="step-number">1</span>上傳題目圖片</div>
+    <div class="sub-text">可上傳 1~6 張，題目與解答皆可上傳</div>
+    """,
+      unsafe_allow_html=True,
+  )
+
+  uploaded_files = st.file_uploader(
+      "",
+      type=["png", "jpg", "jpeg"],
+      accept_multiple_files=True,
+      label_visibility="collapsed",
+  )
+
+  if "cropped_images" not in st.session_state:
+    st.session_state.cropped_images = {}
+
+  if uploaded_files:
+    if len(uploaded_files) > 6:
+      st.error("⚠️ 最多上傳 6 張圖片！")
+    else:
+      tabs = st.tabs([f"圖片 {i+1}" for i in range(len(uploaded_files))])
+      for idx, file in enumerate(uploaded_files):
+        with tabs[idx]:
+          raw_img = Image.open(file)
+          cropped_img = st_cropper(
+              raw_img,
+              realtime_update=True,
+              box_color="#000000",
+              key=f"crop_{idx}",
+          )
+          st.session_state.cropped_images[idx] = cropped_img
+
+  st.divider()
+
+  # --- 步驟 2：設定題目資訊 ---
+  st.markdown(
+      """
+    <div class="step-header"><span class="step-number">2</span>設定題目資訊</div>
+    <div class="sub-text">科目、參考答案與補充敘述</div>
+    """,
+      unsafe_allow_html=True,
+  )
+
+  subject = st.selectbox("科目", ["理化", "生物", "地科", "數學", "其他"])
+  std_answer = st.text_input(
+      "標準參考答案（選填）", placeholder="例如 B、ACD、2.5 mol..."
+  )
+  extra_info = st.text_input(
+      "補充敘述（選填）", placeholder="有需要再補充，例如：想特別問 C 選項"
+  )
+
+  col_btn1, col_btn2 = st.columns(2)
+  with col_btn1:
+    start_btn = st.button("開始解題", type="primary", use_container_width=True)
+  with col_btn2:
+    clear_btn = st.button("清除目前題目", use_container_width=True)
+
+  st.divider()
+
+  # --- 步驟 3：觀念解析 ---
+  st.markdown(
+      """
+    <div class="step-header"><span class="step-number">3</span>觀念解析與 AI 三重驗證</div>
+    <div class="sub-text">答案 ➔ 觀念解析 ➔ 多模態選項比對</div>
+    """,
+      unsafe_allow_html=True,
+  )
+
+  if start_btn:
+    can_submit = True
+    if st.session_state.user_role == "user":
+      u_name = st.session_state.user_name
+      used = st.session_state.users_db[u_name].get("used_today", 0)
+      limit = st.session_state.daily_limit
+      if used >= limit:
+        can_submit = False
+        st.error(
+            f"⚠️ 您今日的提問額度（{limit}"
+            " 題）已用完！請明日再試或聯繫管理員重置。"
         )
-        st.session_state.cropped_images[idx] = cropped_img
 
-st.divider()
-
-# --- 步驟 2：設定題目資訊 ---
-st.markdown(
-    """
-<div class="step-header"><span class="step-number">2</span>設定題目資訊</div>
-<div class="sub-text">科目、參考答案與補充敘述</div>
-""",
-    unsafe_allow_html=True,
-)
-
-subject = st.selectbox("科目", ["理化", "生物", "地科", "數學", "其他"])
-std_answer = st.text_input(
-    "標準參考答案（選填）", placeholder="例如 B、ACD、2.5 mol..."
-)
-extra_info = st.text_input(
-    "補充敘述（選填）", placeholder="有需要再補充，例如：想特別問 C 選項"
-)
-
-col_btn1, col_btn2 = st.columns(2)
-with col_btn1:
-  start_btn = st.button("開始解題", type="primary", use_container_width=True)
-with col_btn2:
-  clear_btn = st.button("清除目前題目", use_container_width=True)
-
-st.divider()
-
-# --- 步驟 3：觀念解析 ---
-st.markdown(
-    """
-<div class="step-header"><span class="step-number">3</span>觀念解析與 AI 三重驗證</div>
-<div class="sub-text">答案 ➔ 觀念解析 ➔ 多模態選項比對</div>
-""",
-    unsafe_allow_html=True,
-)
-
-if start_btn:
-  # 檢查使用者剩餘題數
-  can_submit = True
-  if st.session_state.user_role == "user":
-    u_name = st.session_state.user_name
-    used = st.session_state.users_db[u_name].get("used_today", 0)
-    limit = st.session_state.daily_limit
-    if used >= limit:
-      can_submit = False
-      st.error(
-          f"⚠️ 您今日的提問額度（{limit}"
-          " 題）已用完！請明日再試或聯繫管理員重置。"
+    if can_submit:
+      final_images = (
+          [
+              st.session_state.cropped_images[i]
+              for i in range(len(uploaded_files))
+              if i in st.session_state.cropped_images
+          ]
+          if uploaded_files
+          else []
       )
 
-  if can_submit:
-    final_images = (
-        [
-            st.session_state.cropped_images[i]
-            for i in range(len(uploaded_files))
-            if i in st.session_state.cropped_images
-        ]
-        if uploaded_files
-        else []
-    )
-
-    if not final_images:
-      st.warning("請先上傳至少一張題目圖片！")
-    else:
-      # 使用者提交成功，扣除 1 次額度
-      if st.session_state.user_role == "user":
-        st.session_state.users_db[st.session_state.user_name][
-            "used_today"
-        ] += 1
-
-      with st.status(
-          "🚀 實驗室正在解析題目與進行 AI 比對...", expanded=True
-      ) as status:
-        st.write("🔍 **步驟 1**：Gemini 多圖視覺 OCR 辨識中...")
-        q_text = extract_text_from_images(final_images, extra_info)
-
-        st.write(
-            "🤖 **步驟 2**：Gemini x ChatGPT x Claude 三方平行交叉驗證中..."
-        )
-        g_raw = call_gemini(q_text)
-        c_raw = call_chatgpt(q_text)
-        cl_raw = call_claude(q_text)
-
-        g_ans, g_reason = parse_ai_json(g_raw)
-        c_ans, c_reason = parse_ai_json(c_raw)
-        cl_ans, cl_reason = parse_ai_json(cl_raw)
-
-        status.update(label="🎉 解析完成！", state="complete")
-
-      if g_ans == c_ans == cl_ans:
-        st.success(f"✅ **三家 AI 答案完全一致：【 {g_ans} 】**")
+      if not final_images:
+        st.warning("請先上傳至少一張題目圖片！")
       else:
-        st.warning(
-            f"⚠️ **三家 AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT:"
-            f" {c_ans} | Claude: {cl_ans})"
-        )
+        if st.session_state.user_role == "user":
+          st.session_state.users_db[st.session_state.user_name][
+              "used_today"
+          ] += 1
 
-      res_col1, res_col2, res_col3 = st.columns(3)
-      with res_col1:
-        st.subheader("🤖 Gemini")
-        st.write(f"**答案**：`{g_ans}`")
-        st.write(g_reason)
-      with res_col2:
-        st.subheader("🟢 ChatGPT")
-        st.write(f"**答案**：`{c_ans}`")
-        st.write(c_reason)
-      with res_col3:
-        st.subheader("🟣 Claude")
-        st.write(f"**答案**：`{cl_ans}`")
-        st.write(cl_reason)
-else:
+        with st.status(
+            "🚀 實驗室正在解析題目與進行 AI 比對...", expanded=True
+        ) as status:
+          st.write("🔍 **步驟 1**：Gemini 多圖視覺 OCR 辨識中...")
+          q_text = extract_text_from_images(final_images, extra_info)
+
+          st.write(
+              "🤖 **步驟 2**：Gemini x ChatGPT x Claude 三方平行交叉驗證中..."
+          )
+          g_raw = call_gemini(q_text)
+          c_raw = call_chatgpt(q_text)
+          cl_raw = call_claude(q_text)
+
+          g_ans, g_reason = parse_ai_json(g_raw)
+          c_ans, c_reason = parse_ai_json(c_raw)
+          cl_ans, cl_reason = parse_ai_json(cl_raw)
+
+          # 儲存紀錄至歷史紀錄庫
+          now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+          st.session_state.history_logs.append({
+              "user": st.session_state.user_name,
+              "time": now_str,
+              "subject": subject,
+              "ans": g_ans,
+              "reasoning": g_reason,
+              "extra_info": extra_info,
+          })
+
+          status.update(label="🎉 解析完成！", state="complete")
+
+        if g_ans == c_ans == cl_ans:
+          st.success(f"✅ **三家 AI 答案完全一致：【 {g_ans} 】**")
+        else:
+          st.warning(
+              f"⚠️ **三家 AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT:"
+              f" {c_ans} | Claude: {cl_ans})"
+          )
+
+        res_col1, res_col2, res_col3 = st.columns(3)
+        with res_col1:
+          st.subheader("🤖 Gemini")
+          st.write(f"**答案**：`{g_ans}`")
+          st.write(g_reason)
+        with res_col2:
+          st.subheader("🟢 ChatGPT")
+          st.write(f"**答案**：`{c_ans}`")
+          st.write(c_reason)
+        with res_col3:
+          st.subheader("🟣 Claude")
+          st.write(f"**答案**：`{cl_ans}`")
+          st.write(cl_reason)
+  else:
+    st.info(
+        "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
+    )
   st.info(
       "尚未產生題目詳解，完成上方步驟並點擊「開始解題」後，解析會顯示在這裡。"
   )
