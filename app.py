@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime
+import pandas as pd
 
 from anthropic import Anthropic
 from google import genai
@@ -51,6 +52,20 @@ THEMES = {
 
 if "history_logs" not in st.session_state:
     st.session_state.history_logs = []
+
+# 初始化各家 AI 模型選單的預設值
+if "selected_gemini_model" not in st.session_state:
+    st.session_state.selected_gemini_model = "gemini-2.5-flash"
+if "selected_openai_model" not in st.session_state:
+    st.session_state.selected_openai_model = "gpt-4o-mini"
+if "selected_claude_model" not in st.session_state:
+    st.session_state.selected_claude_model = "claude-3-5-haiku-20241022"
+
+MODEL_OPTIONS = {
+    "Gemini": ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+    "Claude": ["claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229"]
+}
 
 # ==========================================
 # 1. 帳號與 Session 狀態管理
@@ -109,6 +124,23 @@ if st.session_state.logged_in:
         menu_option = st.radio(
             "功能導航", menu_options, index=0, label_visibility="collapsed"
         )
+
+        # 管理員可直接在側邊欄切換模型
+        if st.session_state.user_role == "admin":
+            st.divider()
+            st.subheader("🤖 AI 模型切換設定")
+            st.session_state.selected_gemini_model = st.selectbox(
+                "Gemini 模型", MODEL_OPTIONS["Gemini"],
+                index=MODEL_OPTIONS["Gemini"].index(st.session_state.selected_gemini_model)
+            )
+            st.session_state.selected_openai_model = st.selectbox(
+                "ChatGPT 模型", MODEL_OPTIONS["ChatGPT"],
+                index=MODEL_OPTIONS["ChatGPT"].index(st.session_state.selected_openai_model)
+            )
+            st.session_state.selected_claude_model = st.selectbox(
+                "Claude 模型", MODEL_OPTIONS["Claude"],
+                index=MODEL_OPTIONS["Claude"].index(st.session_state.selected_claude_model)
+            )
 
         st.divider()
         st.subheader("🎨 視覺主題設定")
@@ -314,11 +346,11 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        for model_name in [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-        ]:
+        # 優先採用管理員選擇的模型
+        models_to_try = [st.session_state.selected_gemini_model] + [
+            m for m in MODEL_OPTIONS["Gemini"] if m != st.session_state.selected_gemini_model
+        ]
+        for model_name in models_to_try:
             try:
                 contents = image_list + [ocr_prompt]
                 response = client.models.generate_content(
@@ -346,11 +378,10 @@ def call_gemini(question_text):
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
         last_error = ""
-        for model_name in [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-        ]:
+        models_to_try = [st.session_state.selected_gemini_model] + [
+            m for m in MODEL_OPTIONS["Gemini"] if m != st.session_state.selected_gemini_model
+        ]
+        for model_name in models_to_try:
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -365,7 +396,7 @@ def call_gemini(question_text):
             {
                 "ans": "失敗",
                 "reasoning": (
-                    f"Gemini API 呼叫失敗: {last_error}。請檢查 API Key 是否有效。"
+                    f"Gemini API 呼叫失敗 ({st.session_state.selected_gemini_model}): {last_error}。"
                 ),
             },
             ensure_ascii=False,
@@ -389,7 +420,7 @@ def call_chatgpt(question_text):
     try:
         client = OpenAI(api_key=OPENAI_API_KEY)
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=st.session_state.selected_openai_model,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -411,7 +442,10 @@ def call_chatgpt(question_text):
                 ensure_ascii=False,
             )
         return json.dumps(
-            {"ans": "失敗", "reasoning": f"ChatGPT 呼叫失敗: {err_msg}"},
+            {
+                "ans": "失敗",
+                "reasoning": f"ChatGPT API 呼叫失敗 ({st.session_state.selected_openai_model}): {err_msg}",
+            },
             ensure_ascii=False,
         )
 
@@ -428,7 +462,7 @@ def call_claude(question_text):
     try:
         client = Anthropic(api_key=CLAUDE_API_KEY)
         response = client.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model=st.session_state.selected_claude_model,
             max_tokens=1000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": f"題目：{question_text}"}],
@@ -436,7 +470,10 @@ def call_claude(question_text):
         return response.content[0].text
     except Exception as e:
         return json.dumps(
-            {"ans": "失敗", "reasoning": f"Claude API 呼叫失敗: {str(e)}"},
+            {
+                "ans": "失敗",
+                "reasoning": f"Claude API 呼叫失敗 ({st.session_state.selected_claude_model}): {str(e)}",
+            },
             ensure_ascii=False,
         )
 
@@ -466,6 +503,28 @@ if menu_option == "⚙️ 系統管理":
     st.title("⚙️ 管理員控制後台")
     st.caption("調整系統設定與檢視使用者狀態")
 
+    st.subheader("🤖 當前使用的 AI 模型版本控制")
+    mod_col1, mod_col2, mod_col3 = st.columns(3)
+    with mod_col1:
+        st.session_state.selected_gemini_model = st.selectbox(
+            "Gemini 模型選擇", MODEL_OPTIONS["Gemini"],
+            index=MODEL_OPTIONS["Gemini"].index(st.session_state.selected_gemini_model),
+            key="admin_gemini_sel"
+        )
+    with mod_col2:
+        st.session_state.selected_openai_model = st.selectbox(
+            "ChatGPT 模型選擇", MODEL_OPTIONS["ChatGPT"],
+            index=MODEL_OPTIONS["ChatGPT"].index(st.session_state.selected_openai_model),
+            key="admin_openai_sel"
+        )
+    with mod_col3:
+        st.session_state.selected_claude_model = st.selectbox(
+            "Claude 模型選擇", MODEL_OPTIONS["Claude"],
+            index=MODEL_OPTIONS["Claude"].index(st.session_state.selected_claude_model),
+            key="admin_claude_sel"
+        )
+
+    st.divider()
     st.subheader("🎯 每日提問額度設定")
     new_limit = st.number_input(
         "全站使用者每日預設可提問數",
@@ -532,7 +591,7 @@ if menu_option == "⚙️ 系統管理":
             st.toast(f"已刪除 {u_name}")
             st.rerun()
 
-# 📚 頁面 2：解題紀錄頁面
+# 📚 頁面 2：解題紀錄頁面 (包含下載存檔按鈕)
 elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
     title_text = (
         "📚 全站解題紀錄"
@@ -540,7 +599,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
         else "📚 我的解題紀錄"
     )
     st.title(title_text)
-    st.caption("歷次檢索與解析紀錄匯總")
+    st.caption("歷次檢索與解析紀錄匯總與備份存檔")
     st.divider()
 
     base_logs = (
@@ -556,7 +615,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
     if not base_logs:
         st.info("目前尚無任何解題紀錄！")
     else:
-        st.subheader("🔍 條件篩選")
+        st.subheader("🔍 條件篩選與存檔下載")
         filter_col1, filter_col2 = st.columns(2)
 
         available_users = ["全部使用者"] + list(
@@ -593,6 +652,32 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
             ]
 
         st.caption(f"共找到 **{len(filtered_logs)}** 筆符合條件的紀錄")
+
+        # 💾 儲存檔案按鈕專區 (提供 JSON 與 CSV 格式)
+        if filtered_logs:
+            dl_col1, dl_col2 = st.columns(2)
+            
+            # JSON 下載
+            json_data = json.dumps(filtered_logs, ensure_ascii=False, indent=2)
+            dl_col1.download_button(
+                label="💾 存檔下載 (JSON 檔)",
+                data=json_data,
+                file_name=f"alab_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+
+            # CSV 下載
+            df = pd.DataFrame(filtered_logs)
+            csv_data = df.to_csv(index=False).encode('utf-8-sig')
+            dl_col2.download_button(
+                label="📊 存檔下載 (Excel CSV 檔)",
+                data=csv_data,
+                file_name=f"alab_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
         st.divider()
 
         if not filtered_logs:
@@ -723,12 +808,13 @@ elif menu_option == "📝 開始解題":
                 with st.status(
                     "🚀 實驗室正在解析題目與進行 AI 比對...", expanded=True
                 ) as status:
-                    st.write("🔍 **步驟 1**：Gemini 多圖視覺 OCR 辨識中...")
+                    st.write(f"🔍 **步驟 1**：Gemini ({st.session_state.selected_gemini_model}) 多圖視覺 OCR 辨識中...")
                     q_text = extract_text_from_images(final_images, extra_info)
 
                     st.write(
-                        "🤖 **步驟 2**：Gemini x ChatGPT x Claude"
-                        " 三方平行交叉驗證中..."
+                        f"🤖 **步驟 2**：Gemini ({st.session_state.selected_gemini_model}) x "
+                        f"ChatGPT ({st.session_state.selected_openai_model}) x "
+                        f"Claude ({st.session_state.selected_claude_model}) 三方平行交叉驗證中..."
                     )
                     g_raw = call_gemini(q_text)
                     c_raw = call_chatgpt(q_text)
@@ -774,15 +860,15 @@ elif menu_option == "📝 開始解題":
 
                 res_col1, res_col2, res_col3 = st.columns(3)
                 with res_col1:
-                    st.subheader("🤖 Gemini")
+                    st.subheader(f"🤖 Gemini ({st.session_state.selected_gemini_model})")
                     st.write(f"**答案**：`{g_ans}`")
                     st.write(g_reason)
                 with res_col2:
-                    st.subheader("🟢 ChatGPT")
+                    st.subheader(f"🟢 ChatGPT ({st.session_state.selected_openai_model})")
                     st.write(f"**答案**：`{c_ans}`")
                     st.write(c_reason)
                 with res_col3:
-                    st.subheader("🟣 Claude")
+                    st.subheader(f"🟣 Claude ({st.session_state.selected_claude_model})")
                     st.write(f"**答案**：`{cl_ans}`")
                     st.write(cl_reason)
     else:
