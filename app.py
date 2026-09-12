@@ -539,7 +539,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
           st.write(item["reasoning"])
 
 # 📝 頁面 3：開始解題頁面 (管理員與一般使用者皆會儲存紀錄)
-else:
+elif menu_option == "📝 開始解題":
   st.caption("A.LAB")
   st.title("自然科解題實驗室")
   st.caption("拆解步驟，訂正錯誤，清晰脈絡，梳理思路")
