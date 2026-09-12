@@ -17,7 +17,7 @@ from streamlit_cropper import st_cropper
 # 0. 安全的設定檔存取機制 (Json 本地資料庫)
 # ==========================================
 CONFIG_FILE = "config.json"
-FILE_LOCK = threading.Lock()  # 避免併發寫入檔案衝突
+FILE_LOCK = threading.Lock()
 
 DEFAULT_CONFIG = {
     "daily_limit": 5,
@@ -33,11 +33,6 @@ DEFAULT_CONFIG = {
             "first_login": True,
             "used_today": 0,
         },
-        "張小華": {
-            "password": "2580",
-            "first_login": True,
-            "used_today": 0,
-        },
         "測試使用者": {
             "password": "2580",
             "first_login": True,
@@ -48,14 +43,12 @@ DEFAULT_CONFIG = {
 
 
 def load_config():
-  """安全載入設定檔"""
   if not os.path.exists(CONFIG_FILE):
     save_config(DEFAULT_CONFIG)
     return DEFAULT_CONFIG
   try:
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
       cfg = json.load(f)
-      # 補全可能缺失的鍵值
       for key, val in DEFAULT_CONFIG.items():
         if key not in cfg:
           cfg[key] = val
@@ -66,7 +59,6 @@ def load_config():
 
 
 def save_config(config_data):
-  """原子化寫入 json 檔案，防止檔案毀損"""
   with FILE_LOCK:
     temp_file = f"{CONFIG_FILE}.tmp"
     try:
@@ -80,7 +72,6 @@ def save_config(config_data):
 
 
 def save_config_from_session():
-  """將 Session 狀態同步儲存至 json 檔案"""
   config_data = {
       "daily_limit": st.session_state.daily_limit,
       "selected_gemini_model": st.session_state.selected_gemini_model,
@@ -92,12 +83,6 @@ def save_config_from_session():
       "users_db": st.session_state.users_db,
   }
   save_config(config_data)
-
-
-def image_to_base64(pil_img):
-  buffered = BytesIO()
-  pil_img.save(buffered, format="JPEG")
-  return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 
 def base64_to_image(b64_str):
@@ -151,42 +136,6 @@ THEMES = {
         "input_text": "#FFFFFF",
         "border": "#373D45",
     },
-    "沉穩大地": {
-        "bg": "#1C1917",
-        "sidebar_bg": "#292524",
-        "card_bg": "#3D3A37",
-        "text": "#F5F5F4",
-        "sub_text": "#A8A29E",
-        "primary": "#B45309",
-        "primary_hover": "#92400E",
-        "input_bg": "#292524",
-        "input_text": "#FFFFFF",
-        "border": "#524C46",
-    },
-    "深海藍黑": {
-        "bg": "#0F172A",
-        "sidebar_bg": "#1E293B",
-        "card_bg": "#334155",
-        "text": "#F8FAFC",
-        "sub_text": "#94A3B8",
-        "primary": "#0284C7",
-        "primary_hover": "#0369A1",
-        "input_bg": "#1E293B",
-        "input_text": "#FFFFFF",
-        "border": "#475569",
-    },
-    "沉木墨綠": {
-        "bg": "#0D1F17",
-        "sidebar_bg": "#142E23",
-        "card_bg": "#1D3D30",
-        "text": "#ECFDF5",
-        "sub_text": "#6EE7B7",
-        "primary": "#047857",
-        "primary_hover": "#065F46",
-        "input_bg": "#142E23",
-        "input_text": "#FFFFFF",
-        "border": "#275945",
-    },
 }
 
 MODEL_OPTIONS = {
@@ -199,7 +148,7 @@ MODEL_OPTIONS = {
     "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
 }
 
-# --- Session 狀態初始化 ---
+# --- Session 初始化 ---
 if "history_logs" not in st.session_state:
   st.session_state.history_logs = []
 if "daily_limit" not in st.session_state:
@@ -236,7 +185,6 @@ if "user_name" not in st.session_state:
 if "must_change_password" not in st.session_state:
   st.session_state.must_change_password = False
 
-# 帳號設定
 ADMIN_USER = "Alan2580"
 ADMIN_PASSWORD = "csps106121"
 DEFAULT_USER_PASSWORD = "2580"
@@ -380,7 +328,6 @@ st.markdown(
         font-weight: bold; font-size: 14px; margin-right: 10px;
     }}
     .step-header {{ display: flex; align-items: center; font-size: 18px; font-weight: 700; color: {t["text"]}; margin-bottom: 8px; }}
-    .sub-text {{ color: {t["sub_text"]} !important; font-size: 13px; margin-left: 38px; margin-top: -6px; margin-bottom: 14px; }}
 </style>
 """,
     unsafe_allow_html=True,
@@ -455,22 +402,45 @@ with top_col1:
 st.divider()
 
 # ==========================================
-# 2. AI 引擎與平行呼叫核心邏輯
+# 2. AI 引擎與 國中課綱專屬 Prompt
 # ==========================================
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
 
-SYSTEM_PROMPT = """
-你是一位嚴謹的考題解析專家。請分析使用者提供的題目，並嚴格只回傳以下 JSON 格式（不要包含任何 Markdown 標記，補充繁體中文解析）：
-{
-  "ans": "正確答案選項（例如 A、B、C 或 D，若是非選擇題請給出簡短最終答案）",
-  "reasoning": "詳細的解題步驟與觀念說明"
-}
+
+def build_system_prompt(mode="full"):
+  """建構適應臺灣國中自然科課綱與雙模式的 Prompt"""
+  mode_instruction = ""
+  if mode == "hint":
+    mode_instruction = """
+    【特別指令 - 引導模式】：
+    - 請【不要】直接給出答案選項（ans 請填寫 "提示模式"）。
+    - 著重給出 2~3 個思考切入點、關鍵公式或考點陷阱，引導學生自主思考。
+    """
+  else:
+    mode_instruction = """
+    【特別指令 - 完整解析模式】：
+    - ans 請給出明確的正確選項（如 A、B、C 或 D）。
+    - reasoning 請包含：觀念說明、逐項選項剖析與結論。
+    """
+
+  return f"""
+你是一位嚴謹的臺灣國中自然科會考名師（熟悉翰林、康軒、南一課綱）。
+請分析使用者提供的題目，並嚴格只回傳以下 JSON 格式（不要寫任何 Markdown codeblock 標籤）：
+
+{{
+  "ans": "正確答案選項或提示模式",
+  "reasoning": "詳細解析或思考提示"
+}}
+
+注意事項：
+1. 必須使用臺灣國中課綱標準名詞（如：排水集氣法、電流熱效應、凸透鏡成像等）。
+2. 理化與數學公式請盡量使用 LaTeX 語法格式化（如 $V = I \\times R$ 或 $\\text{{H}}_2\\text{{O}}$）。
+{mode_instruction}
 """
 
 
 def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
-  """優化後的 Gemini 多圖 OCR 辨識"""
   if not GEMINI_API_KEY:
     return "[圖片辨識失敗]: 未設定 GEMINI_API_KEY"
 
@@ -481,28 +451,17 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
   try:
     client = genai.Client(api_key=GEMINI_API_KEY)
     clean_model = st.session_state.selected_gemini_model.replace("models/", "")
-    models_to_try = [
-        clean_model,
-        "gemini-2.0-flash",
-        "gemini-2.5-flash",
-        "gemini-1.5-flash",
-    ]
-
-    for model_name in models_to_try:
-      try:
-        response = client.models.generate_content(
-            model=model_name, contents=image_list + [ocr_prompt]
-        )
-        if response and response.text:
-          return response.text.strip()
-      except Exception:
-        continue
-    return "[圖片辨識失敗]: 所有備用模型皆無法解析圖片"
+    response = client.models.generate_content(
+        model=clean_model, contents=image_list + [ocr_prompt]
+    )
+    return (
+        response.text.strip() if response and response.text else "[圖片解析空白]"
+    )
   except Exception as e:
     return f"[圖片辨識失敗]: {str(e)}"
 
 
-def call_gemini(question_text):
+def call_gemini(question_text, mode):
   if not GEMINI_API_KEY:
     return json.dumps(
         {"ans": "未設定 Key", "reasoning": "未設定 GEMINI_API_KEY。"},
@@ -511,8 +470,9 @@ def call_gemini(question_text):
   try:
     client = genai.Client(api_key=GEMINI_API_KEY)
     clean_model = st.session_state.selected_gemini_model.replace("models/", "")
+    prompt = f"{build_system_prompt(mode)}\n\n題目：{question_text}"
     response = client.models.generate_content(
-        model=clean_model, contents=f"{SYSTEM_PROMPT}\n\n題目：{question_text}"
+        model=clean_model, contents=prompt
     )
     return response.text if response and response.text else "{}"
   except Exception as e:
@@ -522,7 +482,7 @@ def call_gemini(question_text):
     )
 
 
-def call_chatgpt(question_text):
+def call_chatgpt(question_text, mode):
   if not OPENAI_API_KEY:
     return json.dumps(
         {"ans": "未設定 Key", "reasoning": "未設定 OPENAI_API_KEY。"},
@@ -534,7 +494,7 @@ def call_chatgpt(question_text):
         model=st.session_state.selected_openai_model,
         response_format={"type": "json_object"},
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": build_system_prompt(mode)},
             {"role": "user", "content": f"題目：{question_text}"},
         ],
     )
@@ -552,9 +512,7 @@ def parse_ai_json(raw_text):
         raw_text.strip().replace("```json", "").replace("```", "").strip()
     )
     data = json.loads(clean_text)
-    return data.get("ans", "未知").strip().upper(), data.get(
-        "reasoning", "無解析內容"
-    )
+    return data.get("ans", "未知").strip(), data.get("reasoning", "無解析內容")
   except Exception:
     return "格式解析失敗", raw_text
 
@@ -629,18 +587,15 @@ elif menu_option == "🐛 使用者錯誤回報":
           f"📌 [{item['time']}] 回報人：{item['user']} | 狀態：{item.get('status', '待處理')}"
       ):
         st.write(f"**問題描述**：{item['description']}")
-        if item.get("image_b64"):
-          st.image(
-              base64_to_image(item["image_b64"]), use_container_width=True
-          )
         if st.button("刪除此紀錄", key=f"del_bug_{real_idx}"):
           st.session_state.bug_reports.pop(real_idx)
           save_config_from_session()
           st.rerun()
 
-# 📚 解題紀錄頁面
+# 📚 解題紀錄頁面 + 錯題本匯出功能
 elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
-  st.title("📚 解題紀錄匯總")
+  st.title("📚 解題紀錄與會考錯題集")
+
   logs = (
       st.session_state.history_logs
       if st.session_state.user_role == "admin"
@@ -650,16 +605,52 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
           if log["user"] == st.session_state.user_name
       ]
   )
+
   if not logs:
-    st.info("尚無任何紀錄！")
+    st.info("尚無任何解題紀錄！")
   else:
+    # 🌟 錯題本匯出模組 🌟
+    st.subheader("📥 匯出個人錯題本")
+    col_exp1, col_exp2 = st.columns(2)
+
+    # 1. 匯出 Markdown 格式 (適合觀看與筆記)
+    md_content = "# 📖 國中自然科會考錯題複習集\n\n"
+    for idx, item in enumerate(logs, 1):
+      md_content += f"## 第 {idx} 題 [{item['subject']}]\n"
+      md_content += f"- **發問時間**：{item['time']}\n"
+      md_content += f"- **解題模式/答案**：{item['ans']}\n"
+      md_content += f"- **補充說明**：{item['extra_info'] or '無'}\n\n"
+      md_content += f"### 💡 觀念解析：\n{item['reasoning']}\n\n---\n\n"
+
+    col_exp1.download_button(
+        label="📝 下載錯題本 (Markdown 格式)",
+        data=md_content.encode("utf-8"),
+        file_name=f"會考錯題本_{st.session_state.user_name}.md",
+        mime="text/markdown",
+        use_container_width=True,
+    )
+
+    # 2. 匯出 CSV 格式 (適合 Excel 整理)
+    df_logs = pd.DataFrame(logs)
+    csv_data = df_logs.to_csv(index=False).encode("utf-8-sig")
+    col_exp2.download_button(
+        label="📊 下載紀錄表 (CSV 格式)",
+        data=csv_data,
+        file_name=f"解題紀錄_{st.session_state.user_name}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+    st.divider()
+
+    # 展示歷史紀錄
     for item in reversed(logs):
       with st.expander(
           f"📌 [{item['time']}] {item['subject']} - 答案：{item['ans']}"
       ):
         st.write(f"**提問人**：{item['user']}")
         st.write(f"**補充說明**：{item['extra_info'] or '無'}")
-        st.write(f"**解析**：\n{item['reasoning']}")
+        st.markdown(f"**解析內容**：\n{item['reasoning']}")
 
 # 📝 開始解題頁面 (核心功能)
 elif menu_option == "📝 開始解題":
@@ -701,13 +692,26 @@ elif menu_option == "📝 開始解題":
 
   st.divider()
 
-  # 步驟 2：設定題型資訊
+  # 步驟 2：設定題型與解題模式
   st.markdown(
       '<div class="step-header"><span'
-      ' class="step-number">2</span>設定題目資訊</div>',
+      ' class="step-number">2</span>設定題目與模式</div>',
       unsafe_allow_html=True,
   )
-  subject = st.selectbox("科目", st.session_state.subjects)
+
+  col_m1, col_m2 = st.columns(2)
+  subject = col_m1.selectbox("科目", st.session_state.subjects)
+
+  # 🌟 學習模式選擇 🌟
+  solve_mode = col_m2.radio(
+      "解題模式",
+      ["🎯 完整解析 (直接給答案)", "💡 引導模式 (給提示不給答案)"],
+      help="「引導模式」不會直接給答案，會提供關鍵思考切入點，幫助你練出會考真本事！",
+  )
+  mode_key = (
+      "hint" if "引導模式" in solve_mode else "full"
+  )
+
   extra_info = st.text_input(
       "補充敘述（選填）", placeholder="例如：想特別問 C 選項"
   )
@@ -736,7 +740,7 @@ elif menu_option == "📝 開始解題":
       if not final_images:
         st.warning("請先上傳至少一張題目圖片！")
       else:
-        # 扣除額度
+        # 扣額度
         if st.session_state.user_role == "user":
           st.session_state.users_db[st.session_state.user_name][
               "used_today"
@@ -749,16 +753,15 @@ elif menu_option == "📝 開始解題":
 
           st.write("🤖 **步驟 2/2**：啟動雙 AI 模組進行平行邏輯推理...")
 
-          # 🔥 關鍵效能優化：使用 ThreadPoolExecutor 併發呼叫 AI
           g_raw, c_raw = "", ""
           with ThreadPoolExecutor(max_workers=2) as executor:
             future_g = (
-                executor.submit(call_gemini, q_text)
+                executor.submit(call_gemini, q_text, mode_key)
                 if st.session_state.enable_gemini
                 else None
             )
             future_c = (
-                executor.submit(call_chatgpt, q_text)
+                executor.submit(call_chatgpt, q_text, mode_key)
                 if st.session_state.enable_openai
                 else None
             )
@@ -801,17 +804,21 @@ elif menu_option == "📝 開始解題":
             unsafe_allow_html=True,
         )
 
-        # 比對答案
-        valid_ans = [
-            a
-            for a in [g_ans, c_ans]
-            if a not in ["未啟用", "失敗", "未設定 Key", "格式解析失敗"]
-        ]
-        if len(set(valid_ans)) == 1 and valid_ans:
-          st.success(f"✅ **AI 驗證答案一致：【 {valid_ans[0]} 】**")
-        elif len(set(valid_ans)) > 1:
-          st.warning(
-              f"⚠️ **AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT: {c_ans})"
+        if mode_key == "full":
+          valid_ans = [
+              a
+              for a in [g_ans, c_ans]
+              if a not in ["未啟用", "失敗", "未設定 Key", "格式解析失敗"]
+          ]
+          if len(set(valid_ans)) == 1 and valid_ans:
+            st.success(f"✅ **AI 驗證答案一致：【 {valid_ans[0]} 】**")
+          elif len(set(valid_ans)) > 1:
+            st.warning(
+                f"⚠️ **AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT: {c_ans})"
+            )
+        else:
+          st.info(
+              "💡 **目前為【引導模式】，請閱讀以下關鍵提示後試著自己解答！**"
           )
 
         # 兩欄呈現解析
@@ -826,27 +833,21 @@ elif menu_option == "📝 開始解題":
         if st.session_state.enable_gemini:
           with cols[c_idx]:
             st.markdown(
-                f"""<div class="ai-card">
-              <h3>🤖 Gemini ({st.session_state.selected_gemini_model})</h3>
-              <p><b>答案</b>：<code style="font-size:18px;">{g_ans}</code></p>
-              <hr style="border-color:{t["border"]};">
-              <p>{g_reason}</p>
-            </div>""",
-                unsafe_allow_html=True,
+                f"### 🤖 Gemini ({st.session_state.selected_gemini_model})"
             )
+            if mode_key == "full":
+              st.markdown(f"**答案**：`{g_ans}`")
+            st.markdown(g_reason)
             c_idx += 1
 
         if st.session_state.enable_openai:
           with cols[c_idx]:
             st.markdown(
-                f"""<div class="ai-card">
-              <h3>🟢 ChatGPT ({st.session_state.selected_openai_model})</h3>
-              <p><b>答案</b>：<code style="font-size:18px;">{c_ans}</code></p>
-              <hr style="border-color:{t["border"]};">
-              <p>{c_reason}</p>
-            </div>""",
-                unsafe_allow_html=True,
+                f"### 🟢 ChatGPT ({st.session_state.selected_openai_model})"
             )
+            if mode_key == "full":
+              st.markdown(f"**答案**：`{c_ans}`")
+            st.markdown(c_reason)
 
   # 錯誤回報 Drawer
   st.divider()
@@ -857,7 +858,6 @@ elif menu_option == "📝 開始解題":
           "user": st.session_state.user_name,
           "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
           "description": bug_desc.strip(),
-          "image_b64": "",
           "status": "待處理",
       })
       save_config_from_session()
