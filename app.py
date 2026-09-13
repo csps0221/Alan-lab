@@ -17,7 +17,7 @@ import streamlit as st
 from streamlit_cropper import st_cropper
 
 # ==========================================
-# 0. 安全的設定檔存取機制 (Json 本地資料庫)
+# 0. 安全的設定檔與紀錄存取機制 (Json 本地資料庫)
 # ==========================================
 CONFIG_FILE = "config.json"
 FILE_LOCK = threading.Lock()
@@ -30,6 +30,7 @@ DEFAULT_CONFIG = {
     "enable_openai": True,
     "subjects": ["理化", "生物", "地科", "數學", "其他"],
     "bug_reports": [],
+    "history_logs": [],  # 解題紀錄持久化
     "users_db": {
         "王小明": {
             "password": "2580",
@@ -83,6 +84,7 @@ def save_config_from_session():
       "enable_openai": st.session_state.enable_openai,
       "subjects": st.session_state.subjects,
       "bug_reports": st.session_state.bug_reports,
+      "history_logs": st.session_state.history_logs,  # 保存解題紀錄
       "users_db": st.session_state.users_db,
   }
   save_config(config_data)
@@ -171,7 +173,7 @@ MODEL_OPTIONS = {
 
 # --- Session 初始化 ---
 if "history_logs" not in st.session_state:
-  st.session_state.history_logs = []
+  st.session_state.history_logs = config.get("history_logs", [])
 if "daily_limit" not in st.session_state:
   st.session_state.daily_limit = config.get("daily_limit", 5)
 if "users_db" not in st.session_state:
@@ -427,7 +429,9 @@ with top_col1:
   )
   st.write(f"當前使用者：**{st.session_state.user_name}** ({role_label})")
   if st.session_state.user_role == "user":
-    user_info = st.session_state.users_db[st.session_state.user_name]
+    user_info = st.session_state.users_db.get(
+        st.session_state.user_name, {"used_today": 0}
+    )
     used = user_info.get("used_today", 0)
     limit = st.session_state.daily_limit
     remains = max(0, limit - used)
@@ -664,23 +668,59 @@ if menu_option == "⚙️ 系統管理":
   st.divider()
   st.subheader("📋 使用者帳號管理")
   for u_name, info in list(st.session_state.users_db.items()):
-    col_a, col_b, col_c, col_d, col_e = st.columns([2, 2, 2, 2, 1])
+    col_a, col_b, col_c, col_d, col_e = st.columns([2.5, 2, 2, 2, 1])
     col_a.write(f"**{u_name}**")
     col_b.write(f"已用: `{info.get('used_today', 0)}` 題")
-    if col_c.button("🔄 重置題數", key=f"reset_{u_name}"):
+
+    if col_c.button("✏️ 修改名字", key=f"edit_{u_name}"):
+      st.session_state[f"editing_user_{u_name}"] = True
+
+    if col_d.button("🔄 重置/密碼", key=f"reset_{u_name}"):
       st.session_state.users_db[u_name]["used_today"] = 0
-      save_config_from_session()
-      st.toast("已重置題數")
-      st.rerun()
-    if col_d.button("🔑 重設密碼", key=f"pwd_{u_name}"):
       st.session_state.users_db[u_name]["password"] = DEFAULT_USER_PASSWORD
       st.session_state.users_db[u_name]["first_login"] = True
       save_config_from_session()
-      st.toast("已重置為預設密碼 2580")
+      st.toast(f"已重置 {u_name} 題數與密碼 (2580)")
+
     if col_e.button("🗑️", key=f"del_{u_name}"):
       del st.session_state.users_db[u_name]
       save_config_from_session()
       st.rerun()
+
+    # 修改名字彈出框/表單
+    if st.session_state.get(f"editing_user_{u_name}", False):
+      with st.form(key=f"rename_form_{u_name}"):
+        new_name_val = st.text_input("輸入新名字", value=u_name)
+        submit_rename = st.form_submit_button("確認修改")
+        if submit_rename:
+          new_name_clean = new_name_val.strip()
+          if not new_name_clean:
+            st.error("名字不能為空白！")
+          elif (
+              new_name_clean in st.session_state.users_db
+              and new_name_clean != u_name
+          ):
+            st.error("此名字已被其他帳號使用！")
+          else:
+            # 1. 更新 Users DB key
+            st.session_state.users_db[new_name_clean] = (
+                st.session_state.users_db.pop(u_name)
+            )
+
+            # 2. 同步更新解題紀錄歷史中的姓名
+            for log in st.session_state.history_logs:
+              if log.get("user") == u_name:
+                log["user"] = new_name_clean
+
+            # 3. 同步更新錯誤回報紀錄中的姓名
+            for bug in st.session_state.bug_reports:
+              if bug.get("user") == u_name:
+                bug["user"] = new_name_clean
+
+            st.session_state[f"editing_user_{u_name}"] = False
+            save_config_from_session()
+            st.success(f"帳號名字已更新為：{new_name_clean}")
+            st.rerun()
 
 # 🐛 錯誤回報頁面
 elif menu_option == "🐛 使用者錯誤回報":
@@ -710,7 +750,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
       else [
           log
           for log in st.session_state.history_logs
-          if log["user"] == st.session_state.user_name
+          if log.get("user") == st.session_state.user_name
       ]
   )
 
@@ -723,9 +763,10 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
     md_content = "# 📖 國中自然科會考錯題複習集\n\n"
     for idx, item in enumerate(logs, 1):
       md_content += f"## 第 {idx} 題 [{item['subject']}]\n"
+      md_content += f"- **提問人**：{item.get('user', '未知')}\n"
       md_content += f"- **發問時間**：{item['time']}\n"
       md_content += f"- **解題模式/答案**：{item['ans']}\n"
-      md_content += f"- **補充說明**：{item['extra_info'] or '無'}\n\n"
+      md_content += f"- **補充說明**：{item.get('extra_info', '無') or '無'}\n\n"
       md_content += f"### 💡 觀念解析：\n{item['reasoning']}\n\n---\n\n"
 
     col_exp1.download_button(
@@ -750,10 +791,11 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
 
     for item in reversed(logs):
       with st.expander(
-          f"📌 [{item['time']}] {item['subject']} - 答案：{item['ans']}"
+          f"📌 [{item['time']}] {item.get('user', '未知')} -"
+          f" {item['subject']} - 答案：{item['ans']}"
       ):
-        st.write(f"**提問人**：{item['user']}")
-        st.write(f"**補充說明**：{item['extra_info'] or '無'}")
+        st.write(f"**提問人**：{item.get('user', '未知')}")
+        st.write(f"**補充說明**：{item.get('extra_info', '無') or '無'}")
         st.markdown(f"**解析內容**：\n{item['reasoning']}")
 
 # 📝 開始解題頁面 (核心功能)
@@ -769,7 +811,6 @@ elif menu_option == "📝 開始解題":
       unsafe_allow_html=True,
   )
 
-  # 1-1 文字描述題目
   input_text_question = st.text_area(
       "📝 題目文字描述（直接打字輸入題目或選項）",
       placeholder=(
@@ -780,7 +821,6 @@ elif menu_option == "📝 開始解題":
       height=120,
   )
 
-  # 1-2 圖片上傳 (可選)
   uploaded_files = st.file_uploader(
       "📷 上傳題目圖片（可選，最多 6 張）",
       type=["png", "jpg", "jpeg"],
@@ -846,7 +886,6 @@ elif menu_option == "📝 開始解題":
         can_submit = False
         st.error("⚠️ 今日額度已用完，請明日再試！")
 
-    # 檢查是否有輸入文字或上傳圖片
     has_text = bool(input_text_question.strip())
     final_images = (
         [
@@ -864,10 +903,8 @@ elif menu_option == "📝 開始解題":
       st.warning("請至少輸入題目文字或上傳一張題目圖片！")
 
     if can_submit:
-      # 扣額度
       if st.session_state.user_role == "user":
         st.session_state.users_db[st.session_state.user_name]["used_today"] += 1
-        save_config_from_session()
 
       gemini_model = st.session_state.selected_gemini_model
       openai_model = st.session_state.selected_openai_model
@@ -875,7 +912,6 @@ elif menu_option == "📝 開始解題":
       with st.status("🚀 正在進行 AI 解析與平行驗證...", expanded=True):
         full_question_text = ""
 
-        # 情況 1：有圖片 -> 先執行 OCR 辨識圖片文字，並整合純文字題目
         if has_images:
           st.write("🔍 **步驟 1/2**：進行 Gemini 多圖視覺 OCR 辨識...")
           ocr_extracted = extract_text_from_images(
@@ -885,7 +921,6 @@ elif menu_option == "📝 開始解題":
             full_question_text = f"【使用者文字輸入】:\n{input_text_question.strip()}\n\n【圖片辨識內容】:\n{ocr_extracted}"
           else:
             full_question_text = ocr_extracted
-        # 情況 2：只有文字 -> 直接使用輸入的文字
         else:
           st.write("📝 **步驟 1/2**：處理純文字題目...")
           full_question_text = input_text_question.strip()
@@ -925,9 +960,10 @@ elif menu_option == "📝 開始解題":
             else ("未啟用", "未啟用")
         )
 
-        # 紀錄至歷史
         main_ans = g_ans if st.session_state.enable_gemini else c_ans
         main_reason = g_reason if st.session_state.enable_gemini else c_reason
+
+        # 寫入歷史紀錄
         st.session_state.history_logs.append({
             "user": st.session_state.user_name,
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -936,6 +972,9 @@ elif menu_option == "📝 開始解題":
             "reasoning": main_reason,
             "extra_info": extra_info,
         })
+
+        # 保存完整 Session（含 history_logs 持久化）
+        save_config_from_session()
 
       # --- 渲染解答結果 ---
       st.divider()
@@ -962,7 +1001,6 @@ elif menu_option == "📝 開始解題":
             "💡 **目前為【引導模式】，請閱讀以下關鍵提示後試著自己解答！**"
         )
 
-      # 兩欄顏色卡片渲染
       cols = st.columns(
           sum(
               [st.session_state.enable_gemini, st.session_state.enable_openai]
