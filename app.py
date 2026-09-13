@@ -4,9 +4,12 @@ from datetime import datetime
 from io import BytesIO
 import json
 import os
+import random
 import threading
+import time
 
 from google import genai
+from google.genai.errors import APIError
 from openai import OpenAI
 import pandas as pd
 from PIL import Image
@@ -21,7 +24,7 @@ FILE_LOCK = threading.Lock()
 
 DEFAULT_CONFIG = {
     "daily_limit": 5,
-    "selected_gemini_model": "gemini-2.0-flash",
+    "selected_gemini_model": "gemini-2.5-flash",
     "selected_openai_model": "gpt-4o-mini",
     "enable_gemini": True,
     "enable_openai": True,
@@ -90,6 +93,19 @@ def base64_to_image(b64_str):
   return Image.open(BytesIO(img_data))
 
 
+# ---------------------------------------------------------
+# 模型名稱過濾與舊模型自動校正 (修復 404 NOT_FOUND 錯誤)
+# ---------------------------------------------------------
+def sanitize_model_name(model_name: str) -> str:
+  clean = str(model_name).replace("models/", "").strip()
+  deprecated_map = {
+      "gemini-1.5-flash": "gemini-2.5-flash",
+      "gemini-1.5-pro": "gemini-2.5-pro",
+      "gemini-2.0-flash": "gemini-2.5-flash",
+  }
+  return deprecated_map.get(clean, clean)
+
+
 # ==========================================
 # 1. 系統初始化與主題視覺
 # ==========================================
@@ -146,10 +162,9 @@ THEMES = {
 
 MODEL_OPTIONS = {
     "Gemini": [
-        "gemini-2.0-flash",
         "gemini-2.5-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
+        "gemini-3.6-flash",
+        "gemini-2.5-pro",
     ],
     "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
 }
@@ -169,10 +184,16 @@ if "subjects" not in st.session_state:
   )
 if "bug_reports" not in st.session_state:
   st.session_state.bug_reports = config.get("bug_reports", [])
+
+# 載入並進行舊型號淨化
+init_gemini_model = sanitize_model_name(
+    config.get("selected_gemini_model", "gemini-2.5-flash")
+)
+if init_gemini_model not in MODEL_OPTIONS["Gemini"]:
+  init_gemini_model = "gemini-2.5-flash"
+
 if "selected_gemini_model" not in st.session_state:
-  st.session_state.selected_gemini_model = config.get(
-      "selected_gemini_model", "gemini-2.0-flash"
-  )
+  st.session_state.selected_gemini_model = init_gemini_model
 if "selected_openai_model" not in st.session_state:
   st.session_state.selected_openai_model = config.get(
       "selected_openai_model", "gpt-4o-mini"
@@ -228,12 +249,16 @@ if st.session_state.logged_in:
         save_config_from_session()
 
       if st.session_state.enable_gemini:
+        current_g_model = sanitize_model_name(
+            st.session_state.selected_gemini_model
+        )
+        if current_g_model not in MODEL_OPTIONS["Gemini"]:
+          current_g_model = MODEL_OPTIONS["Gemini"][0]
+
         g_sel = st.selectbox(
             "Gemini 版本",
             MODEL_OPTIONS["Gemini"],
-            index=MODEL_OPTIONS["Gemini"].index(
-                st.session_state.selected_gemini_model
-            ),
+            index=MODEL_OPTIONS["Gemini"].index(current_g_model),
         )
         if g_sel != st.session_state.selected_gemini_model:
           st.session_state.selected_gemini_model = g_sel
@@ -415,7 +440,7 @@ with top_col1:
 st.divider()
 
 # ==========================================
-# 2. AI 引擎與 Prompt (修復子執行緒存取問題)
+# 2. AI 引擎與 Prompt (加入自動退避與模型維護)
 # ==========================================
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
@@ -453,7 +478,10 @@ def build_system_prompt(mode="full"):
 
 
 def extract_text_from_images(
-    image_list: list, model_name: str, extra_info: str = ""
+    image_list: list,
+    model_name: str,
+    extra_info: str = "",
+    max_retries: int = 3,
 ) -> str:
   if not GEMINI_API_KEY:
     return "[圖片辨識失敗]: 未設定 GEMINI_API_KEY"
@@ -462,38 +490,78 @@ def extract_text_from_images(
       "請將這幾張圖片中的考題文字完整、精準轉錄（包含題目與選項）。補充說明："
       f" {extra_info}"
   )
-  try:
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    clean_model = model_name.replace("models/", "")
-    response = client.models.generate_content(
-        model=clean_model, contents=image_list + [ocr_prompt]
-    )
-    return (
-        response.text.strip() if response and response.text else "[圖片解析空白]"
-    )
-  except Exception as e:
-    return f"[圖片辨識失敗]: {str(e)}"
+  clean_model = sanitize_model_name(model_name)
+  client = genai.Client(api_key=GEMINI_API_KEY)
+
+  for attempt in range(max_retries):
+    try:
+      response = client.models.generate_content(
+          model=clean_model, contents=image_list + [ocr_prompt]
+      )
+      return (
+          response.text.strip()
+          if response and response.text
+          else "[圖片解析空白]"
+      )
+    except APIError as e:
+      err_str = str(e)
+      if (
+          "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
+      ) and attempt < max_retries - 1:
+        time.sleep((2**attempt) + random.uniform(0.5, 1.5))
+        continue
+      return f"[圖片辨識失敗]: {err_str}"
+    except Exception as e:
+      return f"[圖片辨識失敗]: {str(e)}"
 
 
-def call_gemini(question_text, mode, model_name):
+def call_gemini(question_text, mode, model_name, max_retries: int = 3):
   if not GEMINI_API_KEY:
     return json.dumps(
         {"ans": "未設定 Key", "reasoning": "未設定 GEMINI_API_KEY。"},
         ensure_ascii=False,
     )
-  try:
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    clean_model = model_name.replace("models/", "")
-    prompt = f"{build_system_prompt(mode)}\n\n題目：{question_text}"
-    response = client.models.generate_content(
-        model=clean_model, contents=prompt
-    )
-    return response.text if response and response.text else "{}"
-  except Exception as e:
-    return json.dumps(
-        {"ans": "失敗", "reasoning": f"Gemini 呼叫失敗: {str(e)}"},
-        ensure_ascii=False,
-    )
+
+  clean_model = sanitize_model_name(model_name)
+  client = genai.Client(api_key=GEMINI_API_KEY)
+  prompt = f"{build_system_prompt(mode)}\n\n題目：{question_text}"
+
+  for attempt in range(max_retries):
+    try:
+      response = client.models.generate_content(
+          model=clean_model, contents=prompt
+      )
+      return response.text if response and response.text else "{}"
+    except APIError as e:
+      err_str = str(e)
+      if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+        if attempt < max_retries - 1:
+          time.sleep((2**attempt) + random.uniform(0.5, 1.5))
+          continue
+        return json.dumps(
+            {"ans": "失敗", "reasoning": "⚠️ 觸發 API 配額限制 (429)，請稍後再試。"},
+            ensure_ascii=False,
+        )
+      elif "404" in err_str or "NOT_FOUND" in err_str:
+        return json.dumps(
+            {
+                "ans": "失敗",
+                "reasoning": (
+                    f"404 錯誤：模型 `{clean_model}` 無法存取，請至管理員頁面切換最新模型。"
+                ),
+            },
+            ensure_ascii=False,
+        )
+      else:
+        return json.dumps(
+            {"ans": "失敗", "reasoning": f"Gemini 呼叫失敗: {err_str}"},
+            ensure_ascii=False,
+        )
+    except Exception as e:
+      return json.dumps(
+          {"ans": "失敗", "reasoning": f"Gemini 呼叫失敗: {str(e)}"},
+          ensure_ascii=False,
+      )
 
 
 def call_chatgpt(question_text, mode, model_name):
@@ -742,11 +810,11 @@ elif menu_option == "📝 開始解題":
   solve_mode = col_m2.radio(
       "解題模式",
       ["🎯 完整解析 (直接給答案)", "💡 引導模式 (給提示不給答案)"],
-      help="「引導模式」不會直接給答案，會提供關鍵思考切入點，幫助你練出會考真本事！",
+      help=(
+          "「引導模式」不會直接給答案，會提供關鍵思考切入點，幫助你練出會考真本事！"
+      ),
   )
-  mode_key = (
-      "hint" if "引導模式" in solve_mode else "full"
-  )
+  mode_key = "hint" if "引導模式" in solve_mode else "full"
 
   extra_info = st.text_input(
       "補充敘述（選填）", placeholder="例如：想特別問 C 選項"
@@ -787,13 +855,17 @@ elif menu_option == "📝 開始解題":
         gemini_model = st.session_state.selected_gemini_model
         openai_model = st.session_state.selected_openai_model
 
-        with st.status("🚀 正在進行 AI 解析與平行驗證...", expanded=True):
+        with st.status(
+            "🚀 正在進行 AI 解析與平行驗證...", expanded=True
+        ):
           st.write("🔍 **步驟 1/2**：進行 Gemini 多圖視覺 OCR 辨識...")
           q_text = extract_text_from_images(
               final_images, gemini_model, extra_info
           )
 
-          st.write("🤖 **步驟 2/2**：啟動雙 AI 模組進行平行邏輯推理...")
+          st.write(
+              "🤖 **步驟 2/2**：啟動雙 AI 模組進行平行邏輯推理..."
+          )
 
           g_raw, c_raw = "", ""
           with ThreadPoolExecutor(max_workers=2) as executor:
@@ -883,7 +955,7 @@ elif menu_option == "📝 開始解題":
             )
             st.markdown(
                 f"""<div class="ai-card-gemini">
-              <h3 style="color:#7EA6E0 !important;">🤖 Gemini ({gemini_model})</h3>
+              <h3 style="color:#7EA6E0 !important;">🤖 Gemini ({sanitize_model_name(gemini_model)})</h3>
               {ans_html}
               <div>{g_reason}</div>
             </div>""",
