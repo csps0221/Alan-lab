@@ -30,14 +30,14 @@ DEFAULT_CONFIG = {
     "enable_openai": True,
     "subjects": ["理化", "生物", "地科", "數學", "其他"],
     "bug_reports": [],
-    "history_logs": [],  # 解題紀錄持久化
+    "history_logs": [],
     "users_db": {
         "王小明": {
             "password": "2580",
             "first_login": True,
             "used_today": 0,
-            "total_used": 0,  # 累計解題數
-            "custom_limit": None,  # 個別自訂額度
+            "total_used": 0,
+            "custom_limit": None,
         },
         "測試使用者": {
             "password": "2580",
@@ -60,7 +60,6 @@ def load_config():
       for key, val in DEFAULT_CONFIG.items():
         if key not in cfg:
           cfg[key] = val
-      # 自動修補舊的使用者資料欄位
       if "users_db" in cfg:
         for u_info in cfg["users_db"].values():
           if "total_used" not in u_info:
@@ -101,11 +100,6 @@ def save_config_from_session():
   save_config(config_data)
 
 
-def base64_to_image(b64_str):
-  img_data = base64.b64decode(b64_str)
-  return Image.open(BytesIO(img_data))
-
-
 def sanitize_model_name(model_name: str) -> str:
   clean = str(model_name).replace("models/", "").strip()
   deprecated_map = {
@@ -121,9 +115,7 @@ def sanitize_model_name(model_name: str) -> str:
 # ==========================================
 # 1. 系統初始化與主題視覺
 # ==========================================
-st.set_page_config(
-    page_title="A.lab 自然科解題實驗室", page_icon="🧪", layout="centered"
-)
+st.set_page_config(page_title="A.lab 全能解題實驗室", page_icon="🧪", layout="centered")
 
 config = load_config()
 
@@ -183,13 +175,9 @@ if "history_logs" not in st.session_state:
 if "daily_limit" not in st.session_state:
   st.session_state.daily_limit = config.get("daily_limit", 5)
 if "users_db" not in st.session_state:
-  st.session_state.users_db = config.get(
-      "users_db", DEFAULT_CONFIG["users_db"]
-  )
+  st.session_state.users_db = config.get("users_db", DEFAULT_CONFIG["users_db"])
 if "subjects" not in st.session_state:
-  st.session_state.subjects = config.get(
-      "subjects", DEFAULT_CONFIG["subjects"]
-  )
+  st.session_state.subjects = config.get("subjects", DEFAULT_CONFIG["subjects"])
 if "bug_reports" not in st.session_state:
   st.session_state.bug_reports = config.get("bug_reports", [])
 
@@ -202,9 +190,7 @@ if init_gemini_model not in MODEL_OPTIONS["Gemini"]:
 if "selected_gemini_model" not in st.session_state:
   st.session_state.selected_gemini_model = init_gemini_model
 if "selected_openai_model" not in st.session_state:
-  st.session_state.selected_openai_model = config.get(
-      "selected_openai_model", "gpt-4o-mini"
-  )
+  st.session_state.selected_openai_model = config.get("selected_openai_model", "gpt-4o-mini")
 if "enable_gemini" not in st.session_state:
   st.session_state.enable_gemini = config.get("enable_gemini", True)
 if "enable_openai" not in st.session_state:
@@ -231,34 +217,23 @@ if st.session_state.logged_in:
     st.divider()
 
     menu_options = (
-        [
-            "⚙️ 系統管理",
-            "🐛 使用者錯誤回報",
-            "📝 開始解題",
-            "📚 所有人解題紀錄",
-        ]
+        ["⚙️ 系統管理", "🐛 使用者錯誤回報", "📝 開始解題", "📚 所有人解題紀錄"]
         if st.session_state.user_role == "admin"
         else ["📝 開始解題", "📚 我的解題紀錄"]
     )
-    menu_option = st.radio(
-        "功能導航", menu_options, index=0, label_visibility="collapsed"
-    )
+    menu_option = st.radio("功能導航", menu_options, index=0, label_visibility="collapsed")
 
     if st.session_state.user_role == "admin":
       st.divider()
       st.subheader("🤖 AI 模型控制")
 
-      g_chk = st.checkbox(
-          "啟用 Gemini 模型", value=st.session_state.enable_gemini
-      )
+      g_chk = st.checkbox("啟用 Gemini 模型", value=st.session_state.enable_gemini)
       if g_chk != st.session_state.enable_gemini:
         st.session_state.enable_gemini = g_chk
         save_config_from_session()
 
       if st.session_state.enable_gemini:
-        current_g_model = sanitize_model_name(
-            st.session_state.selected_gemini_model
-        )
+        current_g_model = sanitize_model_name(st.session_state.selected_gemini_model)
         if current_g_model not in MODEL_OPTIONS["Gemini"]:
           current_g_model = MODEL_OPTIONS["Gemini"][0]
 
@@ -271,9 +246,7 @@ if st.session_state.logged_in:
           st.session_state.selected_gemini_model = g_sel
           save_config_from_session()
 
-      o_chk = st.checkbox(
-          "啟用 ChatGPT 模型", value=st.session_state.enable_openai
-      )
+      o_chk = st.checkbox("啟用 ChatGPT 模型", value=st.session_state.enable_openai)
       if o_chk != st.session_state.enable_openai:
         st.session_state.enable_openai = o_chk
         save_config_from_session()
@@ -282,9 +255,7 @@ if st.session_state.logged_in:
         o_sel = st.selectbox(
             "ChatGPT 版本",
             MODEL_OPTIONS["ChatGPT"],
-            index=MODEL_OPTIONS["ChatGPT"].index(
-                st.session_state.selected_openai_model
-            ),
+            index=MODEL_OPTIONS["ChatGPT"].index(st.session_state.selected_openai_model),
         )
         if o_sel != st.session_state.selected_openai_model:
           st.session_state.selected_openai_model = o_sel
@@ -398,9 +369,9 @@ if not st.session_state.logged_in:
       st.session_state.logged_in = True
       st.session_state.user_role = "user"
       st.session_state.user_name = input_user
-      st.session_state.must_change_password = st.session_state.users_db[
-          input_user
-      ]["first_login"]
+      st.session_state.must_change_password = st.session_state.users_db[input_user][
+          "first_login"
+      ]
       st.rerun()
     else:
       st.error("❌ 帳號或密碼錯誤！")
@@ -428,11 +399,7 @@ if st.session_state.must_change_password:
 # --- 頁首狀態 ---
 top_col1, top_col2 = st.columns([3, 1])
 with top_col1:
-  role_label = (
-      "👑 管理員 (無限次數)"
-      if st.session_state.user_role == "admin"
-      else "👤 使用者"
-  )
+  role_label = "👑 管理員 (無限次數)" if st.session_state.user_role == "admin" else "👤 使用者"
   st.write(f"當前使用者：**{st.session_state.user_name}** ({role_label})")
   if st.session_state.user_role == "user":
     user_info = st.session_state.users_db.get(
@@ -452,7 +419,7 @@ with top_col1:
 st.divider()
 
 # ==========================================
-# 2. AI 引擎與 Prompt
+# 2. AI 引擎與 System Prompt（已更新：移除國中會考限制）
 # ==========================================
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
@@ -462,29 +429,31 @@ def build_system_prompt(mode="full"):
   mode_instruction = (
       """
     【特別指令 - 引導模式】：
-    - 請【不要】直接給出答案選項（ans 請填寫 "提示模式"）。
-    - 著重給出 2~3 個思考切入點、關鍵公式或考點陷阱，引導學生自主思考。
+    - 請【不要】直接給出最終答案（ans 請填寫 "提示模式"）。
+    - 著重提供關鍵觀念、解題切入點、公式推導方向或邏輯陷阱，引導使用者自行推理。
     """
       if mode == "hint"
       else """
     【特別指令 - 完整解析模式】：
-    - ans 請給出明確的正確選項（如 A、B、C 或 D）。
-    - reasoning 請包含：觀念說明、逐項選項剖析與結論。
+    - ans 請給出明確答案（若為選擇題請給選項如 A/B/C/D；若為問答或計算題請簡短寫出最終答案數字/結果）。
+    - reasoning 請包含完整的邏輯推導過程、觀念說明與結論。
     """
   )
 
   return f"""
-你是一位嚴謹的臺灣國中自然科會考名師（熟悉翰林、康軒、南一課綱）。
-請分析使用者提供的題目，並嚴格只回傳以下 JSON 格式（不要寫任何 Markdown codeblock 標籤）：
+你是一位博學多聞、邏輯嚴謹的萬能 AI 導師。
+無論使用者提出任何學科、領域、難度或類型的題目（涵蓋科學、數學、程式設計、人文、語言、通用知識等），只要是可以解答的問題，你都必須全力進行解答與剖析。
+
+請嚴格只回傳以下 JSON 格式（絕對不要寫任何 Markdown codeblock 標籤如 ```json ... ```）：
 
 {{
-  "ans": "正確答案選項或提示模式",
+  "ans": "正確答案選項、最終結果或提示模式",
   "reasoning": "詳細解析或思考提示"
 }}
 
 注意事項：
-1. 必須使用臺灣國中課綱標準名詞（如：排水集氣法、電流熱效應、凸透鏡成像等）。
-2. 理化與數學公式請盡量使用 LaTeX 語法格式化（如 $V = I \\times R$ 或 $\\text{{H}}_2\\text{{O}}$）。
+1. 請以流暢專業的繁體中文回答。
+2. 遇到數學、物理、化學公式時，請使用標準 LaTeX 語法格式化（例如 $E = mc^2$ 或 $f(x) = \\int x dx$）。
 {mode_instruction}
 """
 
@@ -499,7 +468,7 @@ def extract_text_from_images(
     return "[圖片辨識失敗]: 未設定 GEMINI_API_KEY"
 
   ocr_prompt = (
-      "請將這幾張圖片中的考題文字完整、精準轉錄（包含題目與選項）。補充說明："
+      "請將這幾張圖片中的題目、題目文字、公式或選項進行完整精準的轉錄與辨識。補充說明："
       f" {extra_info}"
   )
   clean_model = sanitize_model_name(model_name)
@@ -643,10 +612,10 @@ if menu_option == "⚙️ 系統管理":
 
   st.divider()
 
-  st.subheader("📚 科目管理")
+  st.subheader("📚 分類與科目管理")
   col_s1, col_s2 = st.columns([3, 1])
   new_sub = col_s1.text_input(
-      "新增科目", placeholder="例如：地科", key="add_sub_input"
+      "新增主題/科目", placeholder="例如：微積分、程式語言", key="add_sub_input"
   )
   if col_s2.button("➕ 新增"):
     if new_sub.strip() and new_sub not in st.session_state.subjects:
@@ -655,9 +624,7 @@ if menu_option == "⚙️ 系統管理":
       st.success(f"已新增：{new_sub}")
       st.rerun()
 
-  del_sub = st.selectbox(
-      "刪除科目", ["請選擇"] + st.session_state.subjects
-  )
+  del_sub = st.selectbox("刪除科目", ["請選擇"] + st.session_state.subjects)
   if st.button("🗑️ 刪除科目") and del_sub != "請選擇":
     st.session_state.subjects.remove(del_sub)
     save_config_from_session()
@@ -680,7 +647,6 @@ if menu_option == "⚙️ 系統管理":
   st.subheader("📋 使用者帳號與題數管理")
 
   for u_name, info in list(st.session_state.users_db.items()):
-    # 確保必要欄位存在
     used_today = info.get("used_today", 0)
     total_used = info.get("total_used", 0)
     eff_limit = info.get("custom_limit") or st.session_state.daily_limit
@@ -695,7 +661,6 @@ if menu_option == "⚙️ 系統管理":
         st.write(f"**建號至今累計**：`{total_used}` 題")
 
       with col_b:
-        # 增加/個別調整可用額度
         custom_limit_val = st.number_input(
             "個別指定今日發問上限（留空/維持全域上限）",
             min_value=0,
@@ -728,7 +693,6 @@ if menu_option == "⚙️ 系統管理":
         save_config_from_session()
         st.rerun()
 
-      # 修改名字彈出框/表單
       if st.session_state.get(f"editing_user_{u_name}", False):
         with st.form(key=f"rename_form_{u_name}"):
           new_name_val = st.text_input("輸入新名字", value=u_name)
@@ -743,17 +707,12 @@ if menu_option == "⚙️ 系統管理":
             ):
               st.error("此名字已被其他帳號使用！")
             else:
-              # 1. 更新 Users DB key
               st.session_state.users_db[new_name_clean] = (
                   st.session_state.users_db.pop(u_name)
               )
-
-              # 2. 同步更新解題紀錄歷史中的姓名
               for log in st.session_state.history_logs:
                 if log.get("user") == u_name:
                   log["user"] = new_name_clean
-
-              # 3. 同步更新錯誤回報紀錄中的姓名
               for bug in st.session_state.bug_reports:
                 if bug.get("user") == u_name:
                   bug["user"] = new_name_clean
@@ -781,9 +740,9 @@ elif menu_option == "🐛 使用者錯誤回報":
           save_config_from_session()
           st.rerun()
 
-# 📚 解題紀錄頁面 + 錯題本匯出功能
+# 📚 解題紀錄頁面
 elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
-  st.title("📚 解題紀錄與會考錯題集")
+  st.title("📚 解題紀錄與錯題本")
 
   logs = (
       st.session_state.history_logs
@@ -798,10 +757,10 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
   if not logs:
     st.info("尚無任何解題紀錄！")
   else:
-    st.subheader("📥 匯出個人錯題本")
+    st.subheader("📥 匯出個人解答集 / 錯題本")
     col_exp1, col_exp2 = st.columns(2)
 
-    md_content = "# 📖 國中自然科會考錯題複習集\n\n"
+    md_content = "# 📖 個人解題與錯題複習集\n\n"
     for idx, item in enumerate(logs, 1):
       md_content += f"## 第 {idx} 題 [{item['subject']}]\n"
       md_content += f"- **提問人**：{item.get('user', '未知')}\n"
@@ -813,7 +772,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
     col_exp1.download_button(
         label="📝 下載錯題本 (Markdown 格式)",
         data=md_content.encode("utf-8"),
-        file_name=f"會考錯題本_{st.session_state.user_name}.md",
+        file_name=f"個人錯題本_{st.session_state.user_name}.md",
         mime="text/markdown",
         use_container_width=True,
     )
@@ -841,8 +800,8 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
 
 # 📝 開始解題頁面 (核心功能)
 elif menu_option == "📝 開始解題":
-  st.title("🧪 自然科解題實驗室")
-  st.caption("拆解步驟，訂正錯誤，清晰脈絡，梳理思路")
+  st.title("🧪 全能解題實驗室")
+  st.caption("支援全學科、各類型問題：拆解步驟，清晰脈絡，精準解答")
   st.divider()
 
   # 步驟 1：輸入題目內容
@@ -853,12 +812,8 @@ elif menu_option == "📝 開始解題":
   )
 
   input_text_question = st.text_area(
-      "📝 題目文字描述（直接打字輸入題目或選項）",
-      placeholder=(
-          "例如：在一大氣壓下，將 100g 的水從 20°C 加熱至"
-          " 70°C，需要吸收多少卡熱量？\n(A) 5000 卡 (B) 7000 卡 (C) 2000 卡 (D)"
-          " 9000 卡"
-      ),
+      "📝 題目文字描述（可直接貼上文字、題目、程式碼或問題）",
+      placeholder="請在此輸入你想要發問或解答的任何問題...",
       height=120,
   )
 
@@ -892,24 +847,22 @@ elif menu_option == "📝 開始解題":
   # 步驟 2：設定題型與解題模式
   st.markdown(
       '<div class="step-header"><span'
-      ' class="step-number">2</span>設定題目與模式</div>',
+      ' class="step-number">2</span>設定主題與模式</div>',
       unsafe_allow_html=True,
   )
 
   col_m1, col_m2 = st.columns(2)
-  subject = col_m1.selectbox("科目", st.session_state.subjects)
+  subject = col_m1.selectbox("領域 / 科目", st.session_state.subjects)
 
   solve_mode = col_m2.radio(
       "解題模式",
       ["🎯 完整解析 (直接給答案)", "💡 引導模式 (給提示不給答案)"],
-      help=(
-          "「引導模式」不會直接給答案，會提供關鍵思考切入點，幫助你練出會考真本事！"
-      ),
+      help="「引導模式」不會直接給出最終結果，會提供解題方向與思維提示。",
   )
   mode_key = "hint" if "引導模式" in solve_mode else "full"
 
   extra_info = st.text_input(
-      "補充敘述（選填）", placeholder="例如：想特別問 C 選項"
+      "補充敘述（選填）", placeholder="例如：請著重說明第二步的推導 logic"
   )
 
   if st.button("🚀 開始解題", use_container_width=True):
@@ -947,7 +900,6 @@ elif menu_option == "📝 開始解題":
       st.warning("請至少輸入題目文字或上傳一張題目圖片！")
 
     if can_submit:
-      # 更新發問次數（今日與總累計）
       if st.session_state.user_role == "user":
         u_name = st.session_state.user_name
         st.session_state.users_db[u_name]["used_today"] = (
@@ -973,7 +925,7 @@ elif menu_option == "📝 開始解題":
           else:
             full_question_text = ocr_extracted
         else:
-          st.write("📝 **步驟 1/2**：處理純文字題目...")
+          st.write("📝 **步驟 1/2**：處理文字題目...")
           full_question_text = input_text_question.strip()
 
         st.write("🤖 **步驟 2/2**：啟動雙 AI 模組進行平行邏輯推理...")
@@ -1014,7 +966,6 @@ elif menu_option == "📝 開始解題":
         main_ans = g_ans if st.session_state.enable_gemini else c_ans
         main_reason = g_reason if st.session_state.enable_gemini else c_reason
 
-        # 寫入歷史紀錄
         st.session_state.history_logs.append({
             "user": st.session_state.user_name,
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1024,7 +975,6 @@ elif menu_option == "📝 開始解題":
             "extra_info": extra_info,
         })
 
-        # 保存完整 Session 狀態到 config.json
         save_config_from_session()
 
       # --- 渲染解答結果 ---
@@ -1048,14 +998,10 @@ elif menu_option == "📝 開始解題":
               f"⚠️ **AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT: {c_ans})"
           )
       else:
-        st.info(
-            "💡 **目前為【引導模式】，請閱讀以下關鍵提示後試著自己解答！**"
-        )
+        st.info("💡 **目前為【引導模式】，請閱讀以下關鍵提示後試著自己思考！**")
 
       cols = st.columns(
-          sum(
-              [st.session_state.enable_gemini, st.session_state.enable_openai]
-          )
+          sum([st.session_state.enable_gemini, st.session_state.enable_openai])
       )
       c_idx = 0
 
