@@ -36,11 +36,15 @@ DEFAULT_CONFIG = {
             "password": "2580",
             "first_login": True,
             "used_today": 0,
+            "total_used": 0,  # 累計解題數
+            "custom_limit": None,  # 個別自訂額度
         },
         "測試使用者": {
             "password": "2580",
             "first_login": True,
             "used_today": 0,
+            "total_used": 0,
+            "custom_limit": None,
         },
     },
 }
@@ -56,6 +60,13 @@ def load_config():
       for key, val in DEFAULT_CONFIG.items():
         if key not in cfg:
           cfg[key] = val
+      # 自動修補舊的使用者資料欄位
+      if "users_db" in cfg:
+        for u_info in cfg["users_db"].values():
+          if "total_used" not in u_info:
+            u_info["total_used"] = u_info.get("used_today", 0)
+          if "custom_limit" not in u_info:
+            u_info["custom_limit"] = None
       return cfg
   except Exception as e:
     st.error(f"載入設定檔失敗，已還原為預設設定: {e}")
@@ -84,7 +95,7 @@ def save_config_from_session():
       "enable_openai": st.session_state.enable_openai,
       "subjects": st.session_state.subjects,
       "bug_reports": st.session_state.bug_reports,
-      "history_logs": st.session_state.history_logs,  # 保存解題紀錄
+      "history_logs": st.session_state.history_logs,
       "users_db": st.session_state.users_db,
   }
   save_config(config_data)
@@ -95,9 +106,6 @@ def base64_to_image(b64_str):
   return Image.open(BytesIO(img_data))
 
 
-# ---------------------------------------------------------
-# 模型名稱過濾與舊模型自動校正 (修復 404 NOT_FOUND 錯誤)
-# ---------------------------------------------------------
 def sanitize_model_name(model_name: str) -> str:
   clean = str(model_name).replace("models/", "").strip()
   deprecated_map = {
@@ -165,9 +173,7 @@ THEMES = {
 }
 
 MODEL_OPTIONS = {
-    "Gemini": [
-        "gemini-3.6-flash",
-    ],
+    "Gemini": ["gemini-3.6-flash"],
     "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
 }
 
@@ -430,39 +436,42 @@ with top_col1:
   st.write(f"當前使用者：**{st.session_state.user_name}** ({role_label})")
   if st.session_state.user_role == "user":
     user_info = st.session_state.users_db.get(
-        st.session_state.user_name, {"used_today": 0}
+        st.session_state.user_name, {"used_today": 0, "total_used": 0}
     )
     used = user_info.get("used_today", 0)
-    limit = st.session_state.daily_limit
+    limit = user_info.get("custom_limit") or st.session_state.daily_limit
     remains = max(0, limit - used)
     st.progress(
-        min(1.0, used / limit),
-        text=f"📊 今日剩餘額度：{remains}/{limit} 題 (已用 {used} 題)",
+        min(1.0, used / limit) if limit > 0 else 1.0,
+        text=(
+            f"📊 今日額度：{remains}/{limit} 題 (已用 {used} 題) |"
+            f" 累計總發問：{user_info.get('total_used', 0)} 題"
+        ),
     )
 
 st.divider()
 
 # ==========================================
-# 2. AI 引擎與 Prompt (加入自動退避與模型維護)
+# 2. AI 引擎與 Prompt
 # ==========================================
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
 
 
 def build_system_prompt(mode="full"):
-  mode_instruction = ""
-  if mode == "hint":
-    mode_instruction = """
+  mode_instruction = (
+      """
     【特別指令 - 引導模式】：
     - 請【不要】直接給出答案選項（ans 請填寫 "提示模式"）。
     - 著重給出 2~3 個思考切入點、關鍵公式或考點陷阱，引導學生自主思考。
     """
-  else:
-    mode_instruction = """
+      if mode == "hint"
+      else """
     【特別指令 - 完整解析模式】：
     - ans 請給出明確的正確選項（如 A、B、C 或 D）。
     - reasoning 請包含：觀念說明、逐項選項剖析與結論。
     """
+  )
 
   return f"""
 你是一位嚴謹的臺灣國中自然科會考名師（熟悉翰林、康軒、南一課綱）。
@@ -625,6 +634,8 @@ if menu_option == "⚙️ 系統管理":
             "password": DEFAULT_USER_PASSWORD,
             "first_login": True,
             "used_today": 0,
+            "total_used": 0,
+            "custom_limit": None,
         }
         save_config_from_session()
         st.success(f"🎉 已成功建立帳號：{u_name_clean} (預設密碼：2580)")
@@ -653,74 +664,104 @@ if menu_option == "⚙️ 系統管理":
     st.rerun()
 
   st.divider()
-  st.subheader("🎯 每日額度設定")
+  st.subheader("🎯 預設每日額度設定")
   new_limit = st.number_input(
-      "使用者每日上限",
+      "全域使用者預設每日上限",
       min_value=1,
-      max_value=100,
+      max_value=500,
       value=st.session_state.daily_limit,
   )
-  if st.button("更新額度上限"):
+  if st.button("更新預設上限"):
     st.session_state.daily_limit = new_limit
     save_config_from_session()
-    st.success("額度已更新！")
+    st.success("全域預設額度已更新！")
 
   st.divider()
-  st.subheader("📋 使用者帳號管理")
+  st.subheader("📋 使用者帳號與題數管理")
+
   for u_name, info in list(st.session_state.users_db.items()):
-    col_a, col_b, col_c, col_d, col_e = st.columns([2.5, 2, 2, 2, 1])
-    col_a.write(f"**{u_name}**")
-    col_b.write(f"已用: `{info.get('used_today', 0)}` 題")
+    # 確保必要欄位存在
+    used_today = info.get("used_today", 0)
+    total_used = info.get("total_used", 0)
+    eff_limit = info.get("custom_limit") or st.session_state.daily_limit
 
-    if col_c.button("✏️ 修改名字", key=f"edit_{u_name}"):
-      st.session_state[f"editing_user_{u_name}"] = True
+    with st.expander(
+        f"👤 {u_name} ｜ 今日已用：{used_today}/{eff_limit} 題 ｜ 累計提問：{total_used} 題"
+    ):
+      col_a, col_b = st.columns(2)
+      with col_a:
+        st.write(f"**密碼狀態**：{'預設密碼(需變更)' if info.get('first_login') else '已自訂密碼'}")
+        st.write(f"**今日使用次數**：`{used_today}` 題")
+        st.write(f"**建號至今累計**：`{total_used}` 題")
 
-    if col_d.button("🔄 重置/密碼", key=f"reset_{u_name}"):
-      st.session_state.users_db[u_name]["used_today"] = 0
-      st.session_state.users_db[u_name]["password"] = DEFAULT_USER_PASSWORD
-      st.session_state.users_db[u_name]["first_login"] = True
-      save_config_from_session()
-      st.toast(f"已重置 {u_name} 題數與密碼 (2580)")
+      with col_b:
+        # 增加/個別調整可用額度
+        custom_limit_val = st.number_input(
+            "個別指定今日發問上限（留空/維持全域上限）",
+            min_value=0,
+            max_value=1000,
+            value=int(eff_limit),
+            key=f"limit_in_{u_name}",
+        )
+        if st.button("💾 儲存該生獨立額度", key=f"save_limit_{u_name}"):
+          st.session_state.users_db[u_name]["custom_limit"] = custom_limit_val
+          save_config_from_session()
+          st.success(f"已將 {u_name} 的上限修改為 {custom_limit_val} 題")
+          st.rerun()
 
-    if col_e.button("🗑️", key=f"del_{u_name}"):
-      del st.session_state.users_db[u_name]
-      save_config_from_session()
-      st.rerun()
+      st.divider()
+      btn_c1, btn_c2, btn_c3 = st.columns(3)
 
-    # 修改名字彈出框/表單
-    if st.session_state.get(f"editing_user_{u_name}", False):
-      with st.form(key=f"rename_form_{u_name}"):
-        new_name_val = st.text_input("輸入新名字", value=u_name)
-        submit_rename = st.form_submit_button("確認修改")
-        if submit_rename:
-          new_name_clean = new_name_val.strip()
-          if not new_name_clean:
-            st.error("名字不能為空白！")
-          elif (
-              new_name_clean in st.session_state.users_db
-              and new_name_clean != u_name
-          ):
-            st.error("此名字已被其他帳號使用！")
-          else:
-            # 1. 更新 Users DB key
-            st.session_state.users_db[new_name_clean] = (
-                st.session_state.users_db.pop(u_name)
-            )
+      if btn_c1.button("✏️ 修改名字", key=f"edit_{u_name}"):
+        st.session_state[f"editing_user_{u_name}"] = True
 
-            # 2. 同步更新解題紀錄歷史中的姓名
-            for log in st.session_state.history_logs:
-              if log.get("user") == u_name:
-                log["user"] = new_name_clean
+      if btn_c2.button("🔄 重置今日次數/密碼", key=f"reset_{u_name}"):
+        st.session_state.users_db[u_name]["used_today"] = 0
+        st.session_state.users_db[u_name]["password"] = DEFAULT_USER_PASSWORD
+        st.session_state.users_db[u_name]["first_login"] = True
+        save_config_from_session()
+        st.toast(f"已重置 {u_name} 的今日題數與密碼 (2580)")
+        st.rerun()
 
-            # 3. 同步更新錯誤回報紀錄中的姓名
-            for bug in st.session_state.bug_reports:
-              if bug.get("user") == u_name:
-                bug["user"] = new_name_clean
+      if btn_c3.button("🗑️ 刪除此帳號", key=f"del_{u_name}"):
+        del st.session_state.users_db[u_name]
+        save_config_from_session()
+        st.rerun()
 
-            st.session_state[f"editing_user_{u_name}"] = False
-            save_config_from_session()
-            st.success(f"帳號名字已更新為：{new_name_clean}")
-            st.rerun()
+      # 修改名字彈出框/表單
+      if st.session_state.get(f"editing_user_{u_name}", False):
+        with st.form(key=f"rename_form_{u_name}"):
+          new_name_val = st.text_input("輸入新名字", value=u_name)
+          submit_rename = st.form_submit_button("確認修改")
+          if submit_rename:
+            new_name_clean = new_name_val.strip()
+            if not new_name_clean:
+              st.error("名字不能為空白！")
+            elif (
+                new_name_clean in st.session_state.users_db
+                and new_name_clean != u_name
+            ):
+              st.error("此名字已被其他帳號使用！")
+            else:
+              # 1. 更新 Users DB key
+              st.session_state.users_db[new_name_clean] = (
+                  st.session_state.users_db.pop(u_name)
+              )
+
+              # 2. 同步更新解題紀錄歷史中的姓名
+              for log in st.session_state.history_logs:
+                if log.get("user") == u_name:
+                  log["user"] = new_name_clean
+
+              # 3. 同步更新錯誤回報紀錄中的姓名
+              for bug in st.session_state.bug_reports:
+                if bug.get("user") == u_name:
+                  bug["user"] = new_name_clean
+
+              st.session_state[f"editing_user_{u_name}"] = False
+              save_config_from_session()
+              st.success(f"帳號名字已更新為：{new_name_clean}")
+              st.rerun()
 
 # 🐛 錯誤回報頁面
 elif menu_option == "🐛 使用者錯誤回報":
@@ -804,7 +845,7 @@ elif menu_option == "📝 開始解題":
   st.caption("拆解步驟，訂正錯誤，清晰脈絡，梳理思路")
   st.divider()
 
-  # 步驟 1：輸入題目內容（支援文字與圖片）
+  # 步驟 1：輸入題目內容
   st.markdown(
       '<div class="step-header"><span'
       ' class="step-number">1</span>輸入題目內容</div>',
@@ -879,12 +920,15 @@ elif menu_option == "📝 開始解題":
 
     if st.session_state.user_role == "user" and can_submit:
       u_name = st.session_state.user_name
-      if (
-          st.session_state.users_db[u_name].get("used_today", 0)
-          >= st.session_state.daily_limit
-      ):
+      u_info = st.session_state.users_db.get(u_name, {})
+      used_today = u_info.get("used_today", 0)
+      eff_limit = u_info.get("custom_limit") or st.session_state.daily_limit
+
+      if used_today >= eff_limit:
         can_submit = False
-        st.error("⚠️ 今日額度已用完，請明日再試！")
+        st.error(
+            f"⚠️ 今日額度已用完（{used_today}/{eff_limit} 題），請明日再試或聯絡管理員增加額度！"
+        )
 
     has_text = bool(input_text_question.strip())
     final_images = (
@@ -903,8 +947,15 @@ elif menu_option == "📝 開始解題":
       st.warning("請至少輸入題目文字或上傳一張題目圖片！")
 
     if can_submit:
+      # 更新發問次數（今日與總累計）
       if st.session_state.user_role == "user":
-        st.session_state.users_db[st.session_state.user_name]["used_today"] += 1
+        u_name = st.session_state.user_name
+        st.session_state.users_db[u_name]["used_today"] = (
+            st.session_state.users_db[u_name].get("used_today", 0) + 1
+        )
+        st.session_state.users_db[u_name]["total_used"] = (
+            st.session_state.users_db[u_name].get("total_used", 0) + 1
+        )
 
       gemini_model = st.session_state.selected_gemini_model
       openai_model = st.session_state.selected_openai_model
@@ -973,7 +1024,7 @@ elif menu_option == "📝 開始解題":
             "extra_info": extra_info,
         })
 
-        # 保存完整 Session（含 history_logs 持久化）
+        # 保存完整 Session 狀態到 config.json
         save_config_from_session()
 
       # --- 渲染解答結果 ---
