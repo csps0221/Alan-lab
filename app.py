@@ -24,7 +24,7 @@ FILE_LOCK = threading.Lock()
 
 DEFAULT_CONFIG = {
     "daily_limit": 5,
-    "selected_gemini_model": "gemini-2.5-flash",
+    "selected_gemini_model": "gemini-3.6-flash",
     "selected_openai_model": "gpt-4o-mini",
     "enable_gemini": True,
     "enable_openai": True,
@@ -99,9 +99,11 @@ def base64_to_image(b64_str):
 def sanitize_model_name(model_name: str) -> str:
   clean = str(model_name).replace("models/", "").strip()
   deprecated_map = {
-      "gemini-1.5-flash": "gemini-2.5-flash",
-      "gemini-1.5-pro": "gemini-2.5-pro",
-      "gemini-2.0-flash": "gemini-2.5-flash",
+      "gemini-1.5-flash": "gemini-3.6-flash",
+      "gemini-1.5-pro": "gemini-3.6-flash",
+      "gemini-2.0-flash": "gemini-3.6-flash",
+      "gemini-2.5-flash": "gemini-3.6-flash",
+      "gemini-2.5-pro": "gemini-3.6-flash",
   }
   return deprecated_map.get(clean, clean)
 
@@ -162,9 +164,7 @@ THEMES = {
 
 MODEL_OPTIONS = {
     "Gemini": [
-        "gemini-2.5-flash",
         "gemini-3.6-flash",
-        "gemini-2.5-pro",
     ],
     "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
 }
@@ -185,12 +185,11 @@ if "subjects" not in st.session_state:
 if "bug_reports" not in st.session_state:
   st.session_state.bug_reports = config.get("bug_reports", [])
 
-# 載入並進行舊型號淨化
 init_gemini_model = sanitize_model_name(
-    config.get("selected_gemini_model", "gemini-2.5-flash")
+    config.get("selected_gemini_model", "gemini-3.6-flash")
 )
 if init_gemini_model not in MODEL_OPTIONS["Gemini"]:
-  init_gemini_model = "gemini-2.5-flash"
+  init_gemini_model = "gemini-3.6-flash"
 
 if "selected_gemini_model" not in st.session_state:
   st.session_state.selected_gemini_model = init_gemini_model
@@ -763,17 +762,29 @@ elif menu_option == "📝 開始解題":
   st.caption("拆解步驟，訂正錯誤，清晰脈絡，梳理思路")
   st.divider()
 
-  # 步驟 1：圖片上傳與裁剪
+  # 步驟 1：輸入題目內容（支援文字與圖片）
   st.markdown(
       '<div class="step-header"><span'
-      ' class="step-number">1</span>上傳題目圖片</div>',
+      ' class="step-number">1</span>輸入題目內容</div>',
       unsafe_allow_html=True,
   )
+
+  # 1-1 文字描述題目
+  input_text_question = st.text_area(
+      "📝 題目文字描述（直接打字輸入題目或選項）",
+      placeholder=(
+          "例如：在一大氣壓下，將 100g 的水從 20°C 加熱至"
+          " 70°C，需要吸收多少卡熱量？\n(A) 5000 卡 (B) 7000 卡 (C) 2000 卡 (D)"
+          " 9000 卡"
+      ),
+      height=120,
+  )
+
+  # 1-2 圖片上傳 (可選)
   uploaded_files = st.file_uploader(
-      "",
+      "📷 上傳題目圖片（可選，最多 6 張）",
       type=["png", "jpg", "jpeg"],
       accept_multiple_files=True,
-      label_visibility="collapsed",
   )
 
   if "cropped_images" not in st.session_state:
@@ -835,151 +846,166 @@ elif menu_option == "📝 開始解題":
         can_submit = False
         st.error("⚠️ 今日額度已用完，請明日再試！")
 
+    # 檢查是否有輸入文字或上傳圖片
+    has_text = bool(input_text_question.strip())
+    final_images = (
+        [
+            st.session_state.cropped_images[i]
+            for i in range(len(uploaded_files))
+            if i in st.session_state.cropped_images
+        ]
+        if uploaded_files
+        else []
+    )
+    has_images = bool(final_images)
+
+    if not has_text and not has_images:
+      can_submit = False
+      st.warning("請至少輸入題目文字或上傳一張題目圖片！")
+
     if can_submit:
-      final_images = [
-          st.session_state.cropped_images[i]
-          for i in range(len(uploaded_files))
-          if i in st.session_state.cropped_images
-      ]
-      if not final_images:
-        st.warning("請先上傳至少一張題目圖片！")
-      else:
-        # 扣額度
-        if st.session_state.user_role == "user":
-          st.session_state.users_db[st.session_state.user_name][
-              "used_today"
-          ] += 1
-          save_config_from_session()
+      # 扣額度
+      if st.session_state.user_role == "user":
+        st.session_state.users_db[st.session_state.user_name]["used_today"] += 1
+        save_config_from_session()
 
-        # 抓取目前選取的 model 名稱傳給子執行緒
-        gemini_model = st.session_state.selected_gemini_model
-        openai_model = st.session_state.selected_openai_model
+      gemini_model = st.session_state.selected_gemini_model
+      openai_model = st.session_state.selected_openai_model
 
-        with st.status(
-            "🚀 正在進行 AI 解析與平行驗證...", expanded=True
-        ):
+      with st.status("🚀 正在進行 AI 解析與平行驗證...", expanded=True):
+        full_question_text = ""
+
+        # 情況 1：有圖片 -> 先執行 OCR 辨識圖片文字，並整合純文字題目
+        if has_images:
           st.write("🔍 **步驟 1/2**：進行 Gemini 多圖視覺 OCR 辨識...")
-          q_text = extract_text_from_images(
+          ocr_extracted = extract_text_from_images(
               final_images, gemini_model, extra_info
           )
-
-          st.write(
-              "🤖 **步驟 2/2**：啟動雙 AI 模組進行平行邏輯推理..."
-          )
-
-          g_raw, c_raw = "", ""
-          with ThreadPoolExecutor(max_workers=2) as executor:
-            future_g = (
-                executor.submit(call_gemini, q_text, mode_key, gemini_model)
-                if st.session_state.enable_gemini
-                else None
-            )
-            future_c = (
-                executor.submit(call_chatgpt, q_text, mode_key, openai_model)
-                if st.session_state.enable_openai
-                else None
-            )
-
-            if future_g:
-              g_raw = future_g.result()
-            if future_c:
-              c_raw = future_c.result()
-
-          g_ans, g_reason = (
-              parse_ai_json(g_raw)
-              if st.session_state.enable_gemini
-              else ("未啟用", "未啟用")
-          )
-          c_ans, c_reason = (
-              parse_ai_json(c_raw)
-              if st.session_state.enable_openai
-              else ("未啟用", "未啟用")
-          )
-
-          # 紀錄至歷史
-          main_ans = g_ans if st.session_state.enable_gemini else c_ans
-          main_reason = (
-              g_reason if st.session_state.enable_gemini else c_reason
-          )
-          st.session_state.history_logs.append({
-              "user": st.session_state.user_name,
-              "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-              "subject": subject,
-              "ans": main_ans,
-              "reasoning": main_reason,
-              "extra_info": extra_info,
-          })
-
-        # --- 渲染解答結果 ---
-        st.divider()
-        st.markdown(
-            '<div class="step-header"><span'
-            ' class="step-number">3</span>觀念解析與交叉驗證</div>',
-            unsafe_allow_html=True,
-        )
-
-        if mode_key == "full":
-          valid_ans = [
-              a
-              for a in [g_ans, c_ans]
-              if a not in ["未啟用", "失敗", "未設定 Key", "格式解析失敗"]
-          ]
-          if len(set(valid_ans)) == 1 and valid_ans:
-            st.success(f"✅ **AI 驗證答案一致：【 {valid_ans[0]} 】**")
-          elif len(set(valid_ans)) > 1:
-            st.warning(
-                f"⚠️ **AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT: {c_ans})"
-            )
+          if has_text:
+            full_question_text = f"【使用者文字輸入】:\n{input_text_question.strip()}\n\n【圖片辨識內容】:\n{ocr_extracted}"
+          else:
+            full_question_text = ocr_extracted
+        # 情況 2：只有文字 -> 直接使用輸入的文字
         else:
-          st.info(
-              "💡 **目前為【引導模式】，請閱讀以下關鍵提示後試著自己解答！**"
+          st.write("📝 **步驟 1/2**：處理純文字題目...")
+          full_question_text = input_text_question.strip()
+
+        st.write("🤖 **步驟 2/2**：啟動雙 AI 模組進行平行邏輯推理...")
+
+        g_raw, c_raw = "", ""
+        with ThreadPoolExecutor(max_workers=2) as executor:
+          future_g = (
+              executor.submit(
+                  call_gemini, full_question_text, mode_key, gemini_model
+              )
+              if st.session_state.enable_gemini
+              else None
+          )
+          future_c = (
+              executor.submit(
+                  call_chatgpt, full_question_text, mode_key, openai_model
+              )
+              if st.session_state.enable_openai
+              else None
           )
 
-        # 兩欄顏色卡片渲染
-        cols = st.columns(
-            sum([
-                st.session_state.enable_gemini,
-                st.session_state.enable_openai,
-            ])
+          if future_g:
+            g_raw = future_g.result()
+          if future_c:
+            c_raw = future_c.result()
+
+        g_ans, g_reason = (
+            parse_ai_json(g_raw)
+            if st.session_state.enable_gemini
+            else ("未啟用", "未啟用")
         )
-        c_idx = 0
+        c_ans, c_reason = (
+            parse_ai_json(c_raw)
+            if st.session_state.enable_openai
+            else ("未啟用", "未啟用")
+        )
 
-        if st.session_state.enable_gemini:
-          with cols[c_idx]:
-            ans_html = (
-                f"<p><b>答案</b>：<code"
-                f' style="font-size:18px;">{g_ans}</code></p><hr'
-                f' style="border-color:{t["border"]};">'
-                if mode_key == "full"
-                else ""
-            )
-            st.markdown(
-                f"""<div class="ai-card-gemini">
-              <h3 style="color:#7EA6E0 !important;">🤖 Gemini ({sanitize_model_name(gemini_model)})</h3>
-              {ans_html}
-              <div>{g_reason}</div>
-            </div>""",
-                unsafe_allow_html=True,
-            )
-            c_idx += 1
+        # 紀錄至歷史
+        main_ans = g_ans if st.session_state.enable_gemini else c_ans
+        main_reason = g_reason if st.session_state.enable_gemini else c_reason
+        st.session_state.history_logs.append({
+            "user": st.session_state.user_name,
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "subject": subject,
+            "ans": main_ans,
+            "reasoning": main_reason,
+            "extra_info": extra_info,
+        })
 
-        if st.session_state.enable_openai:
-          with cols[c_idx]:
-            ans_html = (
-                f"<p><b>答案</b>：<code"
-                f' style="font-size:18px;">{c_ans}</code></p><hr'
-                f' style="border-color:{t["border"]};">'
-                if mode_key == "full"
-                else ""
-            )
-            st.markdown(
-                f"""<div class="ai-card-openai">
-              <h3 style="color:#63E6BE !important;">🟢 ChatGPT ({openai_model})</h3>
-              {ans_html}
-              <div>{c_reason}</div>
-            </div>""",
-                unsafe_allow_html=True,
-            )
+      # --- 渲染解答結果 ---
+      st.divider()
+      st.markdown(
+          '<div class="step-header"><span'
+          ' class="step-number">3</span>觀念解析與交叉驗證</div>',
+          unsafe_allow_html=True,
+      )
+
+      if mode_key == "full":
+        valid_ans = [
+            a
+            for a in [g_ans, c_ans]
+            if a not in ["未啟用", "失敗", "未設定 Key", "格式解析失敗"]
+        ]
+        if len(set(valid_ans)) == 1 and valid_ans:
+          st.success(f"✅ **AI 驗證答案一致：【 {valid_ans[0]} 】**")
+        elif len(set(valid_ans)) > 1:
+          st.warning(
+              f"⚠️ **AI 答案存在分歧！** (Gemini: {g_ans} | ChatGPT: {c_ans})"
+          )
+      else:
+        st.info(
+            "💡 **目前為【引導模式】，請閱讀以下關鍵提示後試著自己解答！**"
+        )
+
+      # 兩欄顏色卡片渲染
+      cols = st.columns(
+          sum(
+              [st.session_state.enable_gemini, st.session_state.enable_openai]
+          )
+      )
+      c_idx = 0
+
+      if st.session_state.enable_gemini:
+        with cols[c_idx]:
+          ans_html = (
+              f"<p><b>答案</b>：<code"
+              f' style="font-size:18px;">{g_ans}</code></p><hr'
+              f' style="border-color:{t["border"]};">'
+              if mode_key == "full"
+              else ""
+          )
+          st.markdown(
+              f"""<div class="ai-card-gemini">
+            <h3 style="color:#7EA6E0 !important;">🤖 Gemini ({sanitize_model_name(gemini_model)})</h3>
+            {ans_html}
+            <div>{g_reason}</div>
+          </div>""",
+              unsafe_allow_html=True,
+          )
+          c_idx += 1
+
+      if st.session_state.enable_openai:
+        with cols[c_idx]:
+          ans_html = (
+              f"<p><b>答案</b>：<code"
+              f' style="font-size:18px;">{c_ans}</code></p><hr'
+              f' style="border-color:{t["border"]};">'
+              if mode_key == "full"
+              else ""
+          )
+          st.markdown(
+              f"""<div class="ai-card-openai">
+            <h3 style="color:#63E6BE !important;">🟢 ChatGPT ({openai_model})</h3>
+            {ans_html}
+            <div>{c_reason}</div>
+          </div>""",
+              unsafe_allow_html=True,
+          )
 
   # 錯誤回報 Drawer
   st.divider()
