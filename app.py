@@ -7,7 +7,7 @@ import os
 import random
 import threading
 import time
-from zoneinfo import ZoneInfo  # 引入時區模組
+from zoneinfo import ZoneInfo
 
 from google import genai
 from google.genai.errors import APIError
@@ -17,12 +17,19 @@ from PIL import Image
 import streamlit as st
 from streamlit_cropper import st_cropper
 
+# 引入 Streamlit 元件庫以存取 LocalStorage
+import streamlit.components.v1 as components
+
 # 定義台北標準時間 (UTC+8) 取得函數
 TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
 
 def get_taipei_now_str():
     return datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_taipei_today_str():
+    return datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d")
 
 
 # ==========================================
@@ -40,6 +47,7 @@ DEFAULT_CONFIG = {
     "subjects": ["理化", "生物", "地科", "數學", "其他"],
     "bug_reports": [],
     "history_logs": [],
+    "login_logs": [],  # 新增：紀錄使用者上線時間與狀態
     "users_db": {
         "王小明": {
             "password": "2580",
@@ -104,9 +112,22 @@ def save_config_from_session():
         "subjects": st.session_state.subjects,
         "bug_reports": st.session_state.bug_reports,
         "history_logs": st.session_state.history_logs,
+        "login_logs": st.session_state.login_logs,
         "users_db": st.session_state.users_db,
     }
     save_config(config_data)
+
+
+def record_login(user_name, role):
+    """記錄使用者登入歷史 (以台北標準時間寫入)"""
+    log_entry = {
+        "user": user_name,
+        "role": role,
+        "timestamp": get_taipei_now_str(),
+        "date": get_taipei_today_str(),
+    }
+    st.session_state.login_logs.append(log_entry)
+    save_config_from_session()
 
 
 def sanitize_model_name(model_name: str) -> str:
@@ -128,11 +149,72 @@ def pil_to_base64(img: Image.Image) -> str:
 
 
 # ==========================================
-# 1. 系統初始化與主題視覺
+# 1. 系統初始化與 LocalStorage 防重整機制
 # ==========================================
 st.set_page_config(page_title="A.lab 全能解題實驗室", page_icon="🧪", layout="centered")
 
 config = load_config()
+
+# --- Session 初始化 ---
+if "history_logs" not in st.session_state:
+    st.session_state.history_logs = config.get("history_logs", [])
+if "login_logs" not in st.session_state:
+    st.session_state.login_logs = config.get("login_logs", [])
+if "daily_limit" not in st.session_state:
+    st.session_state.daily_limit = config.get("daily_limit", 5)
+if "users_db" not in st.session_state:
+    st.session_state.users_db = config.get("users_db", DEFAULT_CONFIG["users_db"])
+if "subjects" not in st.session_state:
+    st.session_state.subjects = config.get("subjects", DEFAULT_CONFIG["subjects"])
+if "bug_reports" not in st.session_state:
+    st.session_state.bug_reports = config.get("bug_reports", [])
+
+ADMIN_USER = "Alan2580"
+ADMIN_PASSWORD = "csps106121"
+DEFAULT_USER_PASSWORD = "2580"
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "user_role" not in st.session_state:
+    st.session_state.user_role = ""
+if "user_name" not in st.session_state:
+    st.session_state.user_name = ""
+if "must_change_password" not in st.session_state:
+    st.session_state.must_change_password = False
+
+# JavaScript 處理 LocalStorage 讀取與存入
+st_query = st.query_params
+if not st.session_state.logged_in:
+    if "auto_user" in st_query and "auto_role" in st_query:
+        param_user = st_query["auto_user"]
+        param_role = st_query["auto_role"]
+
+        if param_role == "admin" and param_user == ADMIN_USER:
+            st.session_state.logged_in = True
+            st.session_state.user_role = "admin"
+            st.session_state.user_name = "系統管理員"
+        elif param_user in st.session_state.users_db:
+            st.session_state.logged_in = True
+            st.session_state.user_role = "user"
+            st.session_state.user_name = param_user
+            st.session_state.must_change_password = st.session_state.users_db[
+                param_user
+            ]["first_login"]
+
+    # 本地瀏覽器 LocalStorage 狀態恢復 JS
+    js_restore_session = """
+    <script>
+        const storedUser = localStorage.getItem('alab_user');
+        const storedRole = localStorage.getItem('alab_role');
+        const urlParams = new URLSearchParams(window.location.search);
+        if (storedUser && storedRole && !urlParams.has('auto_user')) {
+            urlParams.set('auto_user', storedUser);
+            urlParams.set('auto_role', storedRole);
+            window.location.search = urlParams.toString();
+        }
+    </script>
+    """
+    components.html(js_restore_session, height=0, width=0)
 
 THEMES = {
     "全黑夜間": {
@@ -184,18 +266,6 @@ MODEL_OPTIONS = {
     "ChatGPT": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
 }
 
-# --- Session 初始化 ---
-if "history_logs" not in st.session_state:
-    st.session_state.history_logs = config.get("history_logs", [])
-if "daily_limit" not in st.session_state:
-    st.session_state.daily_limit = config.get("daily_limit", 5)
-if "users_db" not in st.session_state:
-    st.session_state.users_db = config.get("users_db", DEFAULT_CONFIG["users_db"])
-if "subjects" not in st.session_state:
-    st.session_state.subjects = config.get("subjects", DEFAULT_CONFIG["subjects"])
-if "bug_reports" not in st.session_state:
-    st.session_state.bug_reports = config.get("bug_reports", [])
-
 init_gemini_model = sanitize_model_name(
     config.get("selected_gemini_model", "gemini-3.6-flash")
 )
@@ -213,19 +283,6 @@ if "enable_gemini" not in st.session_state:
 if "enable_openai" not in st.session_state:
     st.session_state.enable_openai = config.get("enable_openai", True)
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "user_role" not in st.session_state:
-    st.session_state.user_role = ""
-if "user_name" not in st.session_state:
-    st.session_state.user_name = ""
-if "must_change_password" not in st.session_state:
-    st.session_state.must_change_password = False
-
-ADMIN_USER = "Alan2580"
-ADMIN_PASSWORD = "csps106121"
-DEFAULT_USER_PASSWORD = "2580"
-
 # --- 側邊欄 ---
 if st.session_state.logged_in:
     with st.sidebar:
@@ -234,7 +291,13 @@ if st.session_state.logged_in:
         st.divider()
 
         menu_options = (
-            ["⚙️ 系統管理", "🐛 使用者錯誤回報", "📝 開始解題", "📚 所有人解題紀錄"]
+            [
+                "⚙️ 系統管理",
+                "📊 使用者上線紀錄",
+                "🐛 使用者錯誤回報",
+                "📝 開始解題",
+                "📚 所有人解題紀錄",
+            ]
             if st.session_state.user_role == "admin"
             else ["📝 開始解題", "📚 我的解題紀錄"]
         )
@@ -296,6 +359,20 @@ if st.session_state.logged_in:
             st.session_state.user_role = ""
             st.session_state.user_name = ""
             st.session_state.must_change_password = False
+            st.query_params.clear()
+
+            # 清除 LocalStorage
+            js_logout = """
+            <script>
+                localStorage.removeItem('alab_user');
+                localStorage.removeItem('alab_role');
+                const urlParams = new URLSearchParams(window.location.search);
+                urlParams.delete('auto_user');
+                urlParams.delete('auto_role');
+                window.location.search = urlParams.toString();
+            </script>
+            """
+            components.html(js_logout, height=0, width=0)
             st.rerun()
 else:
     selected_theme = "全黑夜間"
@@ -344,29 +421,6 @@ st.markdown(
         border-radius: 8px !important;
         margin-bottom: 8px !important;
     }}
-    
-    .ai-card-gemini {{
-        background-color: {t["card_gemini"]};
-        border: 1px solid #2B4C7E;
-        border-radius: 10px;
-        padding: 16px;
-        margin-top: 10px;
-    }}
-    .ai-card-openai {{
-        background-color: {t["card_openai"]};
-        border: 1px solid #235D43;
-        border-radius: 10px;
-        padding: 16px;
-        margin-top: 10px;
-    }}
-    .step-number {{
-        background-color: {t["primary"]};
-        color: #FFFFFF !important;
-        border-radius: 50%; width: 28px; height: 28px;
-        display: inline-flex; align-items: center; justify-content: center;
-        font-weight: bold; font-size: 14px; margin-right: 10px;
-    }}
-    .step-header {{ display: flex; align-items: center; font-size: 18px; font-weight: 700; color: {t["text"]}; margin-bottom: 8px; }}
 </style>
 """,
     unsafe_allow_html=True,
@@ -384,6 +438,16 @@ if not st.session_state.logged_in:
             st.session_state.logged_in = True
             st.session_state.user_role = "admin"
             st.session_state.user_name = "系統管理員"
+
+            # 寫入 Login 記錄與 LocalStorage 紀錄
+            record_login("系統管理員", "admin")
+            js_save = f"""
+            <script>
+                localStorage.setItem('alab_user', '{ADMIN_USER}');
+                localStorage.setItem('alab_role', 'admin');
+            </script>
+            """
+            components.html(js_save, height=0, width=0)
             st.rerun()
         elif (
             input_user in st.session_state.users_db
@@ -395,6 +459,16 @@ if not st.session_state.logged_in:
             st.session_state.must_change_password = st.session_state.users_db[
                 input_user
             ]["first_login"]
+
+            # 寫入 Login 記錄與 LocalStorage 紀錄
+            record_login(input_user, "user")
+            js_save = f"""
+            <script>
+                localStorage.setItem('alab_user', '{input_user}');
+                localStorage.setItem('alab_role', 'user');
+            </script>
+            """
+            components.html(js_save, height=0, width=0)
             st.rerun()
         else:
             st.error("❌ 帳號或密碼錯誤！")
@@ -751,11 +825,62 @@ if menu_option == "⚙️ 系統管理":
                             for bug in st.session_state.bug_reports:
                                 if bug.get("user") == u_name:
                                     bug["user"] = new_name_clean
+                            for login in st.session_state.login_logs:
+                                if login.get("user") == u_name:
+                                    login["user"] = new_name_clean
 
                             st.session_state[f"editing_user_{u_name}"] = False
                             save_config_from_session()
                             st.success(f"帳號名字已更新為：{new_name_clean}")
                             st.rerun()
+
+# 📊 使用者上線紀錄頁面（新增功能）
+elif menu_option == "📊 使用者上線紀錄":
+    st.title("📊 使用者登入與上線次數查詢")
+
+    # 日期選擇選單（預設帶入今日日期）
+    today_date = datetime.now(TAIPEI_TZ).date()
+    selected_date = st.date_input("📅 選擇要查詢的日期", value=today_date)
+    selected_date_str = selected_date.strftime("%Y-%m-%d")
+
+    st.divider()
+
+    login_logs = st.session_state.login_logs
+
+    # 篩選特定日期的紀錄
+    filtered_logs = [
+        log for log in login_logs if log.get("date") == selected_date_str
+    ]
+
+    st.subheader(f"📅 日期：{selected_date_str} 統計概覽")
+
+    if not filtered_logs:
+        st.info(f"在 {selected_date_str} 沒有任何登入紀錄！")
+    else:
+        # 計算統計數據
+        total_logins = len(filtered_logs)
+        df_filtered = pd.DataFrame(filtered_logs)
+
+        # 各使用者統計
+        user_counts = df_filtered["user"].value_counts().reset_index()
+        user_counts.columns = ["使用者名稱", "登入/上線次數"]
+
+        m_col1, m_col2 = st.columns(2)
+        m_col1.metric("當日總上線人次", f"{total_logins} 次")
+        m_col2.metric("當日不重複上線人數", f"{len(user_counts)} 人")
+
+        st.divider()
+
+        st.subheader("👥 各使用者上線次數排行榜")
+        st.dataframe(user_counts, use_container_width=True)
+
+        st.divider()
+
+        st.subheader("⏱️ 當日詳細上線時間軸記錄")
+        for log in reversed(filtered_logs):
+            st.text(
+                f"🕒 [{log['timestamp']}] 使用者：{log['user']} ({'👑 管理員' if log['role']=='admin' else '👤 學生'}) 登入系統"
+            )
 
 # 🐛 錯誤回報頁面
 elif menu_option == "🐛 使用者錯誤回報":
@@ -1020,7 +1145,7 @@ elif menu_option == "📝 開始解題":
 
                 latest_log = {
                     "user": st.session_state.user_name,
-                    "time": get_taipei_now_str(),  # 使用台北時間
+                    "time": get_taipei_now_str(),
                     "subject": subject,
                     "ans": main_ans,
                     "reasoning": main_reason,
@@ -1057,7 +1182,7 @@ elif menu_option == "📝 開始解題":
                     st.session_state.bug_reports.append(
                         {
                             "user": st.session_state.user_name,
-                            "time": get_taipei_now_str(),  # 使用台北時間
+                            "time": get_taipei_now_str(),
                             "description": bug_desc.strip(),
                             "related_question": (
                                 f"[{res['subject']}] 答案: {res['ans']}\n"
