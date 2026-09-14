@@ -7,6 +7,7 @@ import os
 import random
 import threading
 import time
+from zoneinfo import ZoneInfo  # 引入時區模組
 
 from google import genai
 from google.genai.errors import APIError
@@ -15,6 +16,14 @@ import pandas as pd
 from PIL import Image
 import streamlit as st
 from streamlit_cropper import st_cropper
+
+# 定義台北標準時間 (UTC+8) 取得函數
+TAIPEI_TZ = ZoneInfo("Asia/Taipei")
+
+
+def get_taipei_now_str():
+    return datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
 
 # ==========================================
 # 0. 安全的設定檔與紀錄存取機制 (Json 本地資料庫)
@@ -696,20 +705,17 @@ if menu_option == "⚙️ 系統管理":
 
             st.divider()
 
-            # 按鍵拆成兩行或獨立的按鍵
             btn_c1, btn_c2, btn_c3, btn_c4 = st.columns(4)
 
             if btn_c1.button("✏️ 修改名字", key=f"edit_{u_name}"):
                 st.session_state[f"editing_user_{u_name}"] = True
 
-            # 獨立按鍵 1: 重置今日次數
             if btn_c2.button("🔄 重置今日次數", key=f"reset_count_{u_name}"):
                 st.session_state.users_db[u_name]["used_today"] = 0
                 save_config_from_session()
                 st.toast(f"已重置 {u_name} 的今日發問次數！")
                 st.rerun()
 
-            # 獨立按鍵 2: 重置密碼
             if btn_c3.button("🔑 重置密碼", key=f"reset_pwd_{u_name}"):
                 st.session_state.users_db[u_name]["password"] = DEFAULT_USER_PASSWORD
                 st.session_state.users_db[u_name]["first_login"] = True
@@ -795,7 +801,7 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
         for idx, item in enumerate(logs, 1):
             md_content += f"## 第 {idx} 題 [{item['subject']}]\n"
             md_content += f"- **提問人**：{item.get('user', '未知')}\n"
-            md_content += f"- **發問時間**：{item['time']}\n"
+            md_content += f"- **發問時間 (台北時間)**：{item['time']}\n"
             md_content += f"- **題目文字與內容**：{item.get('question_text', '無')}\n"
             md_content += f"- **解題模式/答案**：{item['ans']}\n"
             md_content += f"- **補充說明**：{item.get('extra_info', '無') or '無'}\n\n"
@@ -830,7 +836,6 @@ elif menu_option in ["📚 我的解題紀錄", "📚 所有人解題紀錄"]:
                 st.write(f"**補充說明**：{item.get('extra_info', '無') or '無'}")
                 st.markdown(f"**完整題目與辨識內容**：\n```text\n{item.get('question_text', '無文字內容')}\n```")
 
-                # 如果有上傳圖片，展示上傳的圖片
                 images_b64 = item.get("images_b64", [])
                 if images_b64:
                     st.write("**📷 提問時上傳的圖片：**")
@@ -851,7 +856,6 @@ elif menu_option == "📝 開始解題":
     st.caption("支援全學科、各類型問題：拆解步驟，清晰脈絡，精準解答")
     st.divider()
 
-    # 步驟 1：輸入題目內容
     st.markdown(
         '<div class="step-header"><span class="step-number">1</span>輸入題目內容</div>',
         unsafe_allow_html=True,
@@ -890,7 +894,6 @@ elif menu_option == "📝 開始解題":
 
     st.divider()
 
-    # 步驟 2：設定題型與解題模式
     st.markdown(
         '<div class="step-header"><span class="step-number">2</span>設定主題與模式</div>',
         unsafe_allow_html=True,
@@ -1013,12 +1016,11 @@ elif menu_option == "📝 開始解題":
                     g_reason if st.session_state.enable_gemini else c_reason
                 )
 
-                # 將圖片轉為 base64 儲存到歷史紀錄中以供管理員查閱
                 images_b64 = [pil_to_base64(img) for img in final_images]
 
                 latest_log = {
                     "user": st.session_state.user_name,
-                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "time": get_taipei_now_str(),  # 使用台北時間
                     "subject": subject,
                     "ans": main_ans,
                     "reasoning": main_reason,
@@ -1045,7 +1047,6 @@ elif menu_option == "📝 開始解題":
 
         st.divider()
 
-        # 答案欄下方的新增功能：問題回報
         with st.expander("🐛 對此題解答有疑問？點此進行問題回報"):
             bug_desc = st.text_area(
                 "請描述您發現的問題（例如：答案算錯、解析不清楚、圖片辨識有誤）",
@@ -1056,7 +1057,7 @@ elif menu_option == "📝 開始解題":
                     st.session_state.bug_reports.append(
                         {
                             "user": st.session_state.user_name,
-                            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "time": get_taipei_now_str(),  # 使用台北時間
                             "description": bug_desc.strip(),
                             "related_question": (
                                 f"[{res['subject']}] 答案: {res['ans']}\n"
