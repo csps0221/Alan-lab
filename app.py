@@ -32,6 +32,10 @@ def get_taipei_today_str():
     return datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d")
 
 
+def get_taipei_today_date():
+    return datetime.now(TAIPEI_TZ).date()
+
+
 # ==========================================
 # 0. 安全的設定檔與紀錄存取機制 (Json 本地資料庫)
 # ==========================================
@@ -47,7 +51,7 @@ DEFAULT_CONFIG = {
     "subjects": ["理化", "生物", "地科", "數學", "其他"],
     "bug_reports": [],
     "history_logs": [],
-    "login_logs": [],  # 新增：紀錄使用者上線時間與狀態
+    "login_logs": [],
     "users_db": {
         "王小明": {
             "password": "2580",
@@ -228,8 +232,18 @@ THEMES = {
         "input_bg": "#12161F",
         "input_text": "#FFFFFF",
         "border": "#2D3545",
-        "card_gemini": "#16233B",
-        "card_openai": "#122B22",
+    },
+    "森林綠": {
+        "bg": "#0D1F17",
+        "sidebar_bg": "#132A20",
+        "card_bg": "#1B382B",
+        "text": "#E8F5E9",
+        "sub_text": "#A5D6A7",
+        "primary": "#2E7D32",
+        "primary_hover": "#1B5E20",
+        "input_bg": "#132A20",
+        "input_text": "#FFFFFF",
+        "border": "#2E4F3E",
     },
     "極簡純黑": {
         "bg": "#000000",
@@ -242,8 +256,6 @@ THEMES = {
         "input_bg": "#1F1F1F",
         "input_text": "#FFFFFF",
         "border": "#2A2A2A",
-        "card_gemini": "#181824",
-        "card_openai": "#14241B",
     },
     "深邃石墨": {
         "bg": "#1A1C1E",
@@ -256,8 +268,6 @@ THEMES = {
         "input_bg": "#22252A",
         "input_text": "#FFFFFF",
         "border": "#373D45",
-        "card_gemini": "#212D40",
-        "card_openai": "#1D332A",
     },
 }
 
@@ -834,53 +844,54 @@ if menu_option == "⚙️ 系統管理":
                             st.success(f"帳號名字已更新為：{new_name_clean}")
                             st.rerun()
 
-# 📊 使用者上線紀錄頁面（新增功能）
+# 📊 使用者上線紀錄頁面（含未來日期查詢阻擋機制）
 elif menu_option == "📊 使用者上線紀錄":
     st.title("📊 使用者登入與上線次數查詢")
 
-    # 日期選擇選單（預設帶入今日日期）
-    today_date = datetime.now(TAIPEI_TZ).date()
+    today_date = get_taipei_today_date()
     selected_date = st.date_input("📅 選擇要查詢的日期", value=today_date)
     selected_date_str = selected_date.strftime("%Y-%m-%d")
 
     st.divider()
 
-    login_logs = st.session_state.login_logs
-
-    # 篩選特定日期的紀錄
-    filtered_logs = [
-        log for log in login_logs if log.get("date") == selected_date_str
-    ]
-
-    st.subheader(f"📅 日期：{selected_date_str} 統計概覽")
-
-    if not filtered_logs:
-        st.info(f"在 {selected_date_str} 沒有任何登入紀錄！")
+    # 未來日期阻擋與警告提醒
+    if selected_date > today_date:
+        st.warning("⚠️ 未來日期無法查詢！請選擇今日（含）以前的日期。")
     else:
-        # 計算統計數據
-        total_logins = len(filtered_logs)
-        df_filtered = pd.DataFrame(filtered_logs)
+        login_logs = st.session_state.login_logs
 
-        # 各使用者統計
-        user_counts = df_filtered["user"].value_counts().reset_index()
-        user_counts.columns = ["使用者名稱", "登入/上線次數"]
+        # 篩選特定日期的紀錄
+        filtered_logs = [
+            log for log in login_logs if log.get("date") == selected_date_str
+        ]
 
-        m_col1, m_col2 = st.columns(2)
-        m_col1.metric("當日總上線人次", f"{total_logins} 次")
-        m_col2.metric("當日不重複上線人數", f"{len(user_counts)} 人")
+        st.subheader(f"📅 日期：{selected_date_str} 統計概覽")
 
-        st.divider()
+        if not filtered_logs:
+            st.info(f"在 {selected_date_str} 沒有任何登入紀錄！")
+        else:
+            total_logins = len(filtered_logs)
+            df_filtered = pd.DataFrame(filtered_logs)
 
-        st.subheader("👥 各使用者上線次數排行榜")
-        st.dataframe(user_counts, use_container_width=True)
+            user_counts = df_filtered["user"].value_counts().reset_index()
+            user_counts.columns = ["使用者名稱", "登入/上線次數"]
 
-        st.divider()
+            m_col1, m_col2 = st.columns(2)
+            m_col1.metric("當日總上線人次", f"{total_logins} 次")
+            m_col2.metric("當日不重複上線人數", f"{len(user_counts)} 人")
 
-        st.subheader("⏱️ 當日詳細上線時間軸記錄")
-        for log in reversed(filtered_logs):
-            st.text(
-                f"🕒 [{log['timestamp']}] 使用者：{log['user']} ({'👑 管理員' if log['role']=='admin' else '👤 學生'}) 登入系統"
-            )
+            st.divider()
+
+            st.subheader("👥 各使用者上線次數排行榜")
+            st.dataframe(user_counts, use_container_width=True)
+
+            st.divider()
+
+            st.subheader("⏱️ 當日詳細上線時間軸記錄")
+            for log in reversed(filtered_logs):
+                st.text(
+                    f"🕒 [{log['timestamp']}] 使用者：{log['user']} ({'👑 管理員' if log['role']=='admin' else '👤 學生'}) 登入系統"
+                )
 
 # 🐛 錯誤回報頁面
 elif menu_option == "🐛 使用者錯誤回報":
