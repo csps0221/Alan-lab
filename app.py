@@ -145,7 +145,7 @@ def pil_to_base64(img: Image.Image) -> str:
 # =========================================================
 # 1. 系統初始化與 LocalStorage/URL 防重整登出機制
 # =========================================================
-st.set_page_config(page_title="A.lab 全能解題實驗室", page_icon="📚 ", layout="centered")
+st.set_page_config(page_title="A.lab 全能解題實驗室", page_icon="☁️", layout="centered")
 config = load_config()
 
 # --- Session 初始化
@@ -209,6 +209,18 @@ if (storedUser && storedRole && !urlParams.has('auto_user')) {
 components.html(js_restore_session, height=0, width=0)
 
 THEMES = {
+    "天空藍": {
+        "bg": "#F0F8FF",
+        "sidebar_bg": "#E0F2FE",
+        "card_bg": "#FFFFFF",
+        "text": "#1E293B",
+        "sub_text": "#0284C7",
+        "primary": "#38BDF8",
+        "primary_hover": "#0284C7",
+        "input_bg": "#FFFFFF",
+        "input_text": "#1E293B",
+        "border": "#BAE6FD",
+    },
     "櫻花粉": {
         "bg": "#FFF5F7",
         "sidebar_bg": "#FFE6EA",
@@ -289,12 +301,13 @@ if "enable_gemini" not in st.session_state:
 if "enable_openai" not in st.session_state:
     st.session_state.enable_openai = config.get("enable_openai", True)
 
-selected_theme = "櫻花粉"
+# 將預設主題改為天空藍
+selected_theme = "天空藍"
 
 # --- 側邊欄 ---
 if st.session_state.logged_in:
     with st.sidebar:
-        st.title("📚 選單")
+        st.title("☁️ 選單")
         st.write(f"當前登入：**{st.session_state.user_name}**")
         st.divider()
         menu_options = (
@@ -409,7 +422,7 @@ st.markdown(
 
 # --- 登入控制 ---
 if not st.session_state.logged_in:
-    st.title("📚 A.lab 登入系統")
+    st.title("☁️ A.lab 登入系統")
     st.caption("請輸入您的姓名/帳號與密碼")
     input_user = st.text_input("姓名/管理員帳號")
     input_password = st.text_input("密碼", type="password")
@@ -848,7 +861,7 @@ elif menu_option in ["我的解題紀錄", "所有人解題紀錄"]:
 
 # 開始解題頁面 (核心功能)
 elif menu_option == "開始解題":
-    st.title("🌸 全能解題實驗室")
+    st.title("☁️ 全能解題實驗室")
     st.caption("支援全學科、各類型問題: 拆解步驟, 清晰脈絡, 精準解答")
     st.divider()
 
