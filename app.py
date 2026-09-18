@@ -143,9 +143,9 @@ def pil_to_base64(img: Image.Image) -> str:
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 # =========================================================
-# 1. 系統初始化與 LocalStorage 防重整機制
+# 1. 系統初始化與 LocalStorage/URL 防重整登出機制
 # =========================================================
-st.set_page_config(page_title="A.lab 全能解題實驗室", page_icon="🌸", layout="centered")
+st.set_page_config(page_title="A.lab 全能解題實驗室", page_icon="📚 ", layout="centered")
 config = load_config()
 
 # --- Session 初始化
@@ -175,8 +175,10 @@ if "user_name" not in st.session_state:
 if "must_change_password" not in st.session_state:
     st.session_state.must_change_password = False
 
-# JavaScript 處理 LocalStorage 讀取與存入
+# 讀取 URL 參數
 st_query = st.query_params
+
+# 若 Session 未記錄登入，先從 URL 參數防重整自動恢復
 if not st.session_state.logged_in:
     if "auto_user" in st_query and "auto_role" in st_query:
         param_user = st_query["auto_user"]
@@ -189,9 +191,9 @@ if not st.session_state.logged_in:
             st.session_state.logged_in = True
             st.session_state.user_role = "user"
             st.session_state.user_name = param_user
-            st.session_state.must_change_password = st.session_state.users_db[param_user]["first_login"]
+            st.session_state.must_change_password = st.session_state.users_db[param_user].get("first_login", False)
 
-# 本地瀏覽器 LocalStorage 狀態恢復 JS
+# 前端 JS: 若 LocalStorage 存在記錄但 URL 沒有參數，自動寫入 URL 恢復
 js_restore_session = """
 <script>
 const storedUser = localStorage.getItem('alab_user');
@@ -206,7 +208,6 @@ if (storedUser && storedRole && !urlParams.has('auto_user')) {
 """
 components.html(js_restore_session, height=0, width=0)
 
-# 新增「櫻花粉」主題主題樣式檔
 THEMES = {
     "櫻花粉": {
         "bg": "#FFF5F7",
@@ -288,12 +289,12 @@ if "enable_gemini" not in st.session_state:
 if "enable_openai" not in st.session_state:
     st.session_state.enable_openai = config.get("enable_openai", True)
 
-selected_theme = "櫻花粉" # 預設載入主題為櫻花粉
+selected_theme = "櫻花粉"
 
 # --- 側邊欄 ---
 if st.session_state.logged_in:
     with st.sidebar:
-        st.title("🌸 選單")
+        st.title("📚 選單")
         st.write(f"當前登入：**{st.session_state.user_name}**")
         st.divider()
         menu_options = (
@@ -346,15 +347,13 @@ if st.session_state.logged_in:
             st.session_state.user_role = ""
             st.session_state.user_name = ""
             st.session_state.must_change_password = False
-            st.query_params.clear()
+            st.query_params.clear() # 清空 URL 參數
+            
             js_logout = """
             <script>
             localStorage.removeItem('alab_user');
             localStorage.removeItem('alab_role');
-            const urlParams = new URLSearchParams(window.location.search);
-            urlParams.delete('auto_user');
-            urlParams.delete('auto_role');
-            window.location.search = urlParams.toString();
+            window.location.href = window.location.pathname;
             </script>
             """
             components.html(js_logout, height=0, width=0)
@@ -364,7 +363,7 @@ else:
 
 t = THEMES[selected_theme]
 
-# 全域 CSS 注入
+# CSS 注入
 st.markdown(
     f"""
     <style>
@@ -410,7 +409,7 @@ st.markdown(
 
 # --- 登入控制 ---
 if not st.session_state.logged_in:
-    st.title("🌸 A.lab 登入系統")
+    st.title("📚 A.lab 登入系統")
     st.caption("請輸入您的姓名/帳號與密碼")
     input_user = st.text_input("姓名/管理員帳號")
     input_password = st.text_input("密碼", type="password")
@@ -420,6 +419,11 @@ if not st.session_state.logged_in:
             st.session_state.user_role = "admin"
             st.session_state.user_name = "系統管理員"
             record_login("系統管理員", "admin")
+            
+            # 將登入標記寫入 URL 參數以支援刷新不登出
+            st.query_params["auto_user"] = ADMIN_USER
+            st.query_params["auto_role"] = "admin"
+            
             js_save = f"""
             <script>
             localStorage.setItem('alab_user', '{ADMIN_USER}');
@@ -437,6 +441,11 @@ if not st.session_state.logged_in:
             st.session_state.user_name = input_user
             st.session_state.must_change_password = st.session_state.users_db[input_user]["first_login"]
             record_login(input_user, "user")
+            
+            # 將登入標記寫入 URL 參數以支援刷新不登出
+            st.query_params["auto_user"] = input_user
+            st.query_params["auto_role"] = "user"
+            
             js_save = f"""
             <script>
             localStorage.setItem('alab_user', '{input_user}');
