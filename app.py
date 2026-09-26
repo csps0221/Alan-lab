@@ -404,22 +404,23 @@ if not st.session_state.logged_in:
             st.stop()
 
 # ====================
-# 3. AI 核心邏輯
+# 3. AI 核心邏輯 (加入科目專業提示)
 # ====================
-def build_system_prompt():
-    return """你是一位專業嚴謹的萬能AI導師。
-請針對使用者提出的問題(無論是文字敘述或圖片題目)進行精準解答與深度邏輯剖析。
+def build_system_prompt(subject: str = "通用"):
+    return f"""你是一位專業嚴謹的【{subject}】領域萬能 AI 導師。
+請針對使用者提出的問題(無論是文字敘述或圖片題目)進行【{subject}】領域精準解答與深度邏輯剖析。
+
 請嚴格回傳JSON格式(不要包裹在 markdown codeblock 中):
-{
+{{
     "ans": "正確答案選項或簡短最終結果",
     "reasoning": "步驟清晰、邏輯嚴謹的詳細觀念推導過程"
-}
-遇到公式請使用標準 LaTeX 語法(如 $E=mc^{2}$)。請以繁體中文回答。"""
+}}
+遇到公式請使用標準 LaTeX 語法(如 $E=mc^{{2}}$)。請以繁體中文回答。"""
 
-def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
+def extract_text_from_images(image_list: list, extra_info: str = "", subject: str = "通用") -> str:
     if not GEMINI_API_KEY or not image_list or not st.session_state.enable_gemini:
         return ""
-    ocr_prompt = f"請詳細轉錄圖片中的所有題目文字、選項與公式。補充文字描述:\n{extra_info}"
+    ocr_prompt = f"這是一道【{subject}】科目的題目。請詳細轉錄圖片中的所有題目文字、選項與公式。補充文字描述:\n{extra_info}"
     client = genai.Client(api_key=GEMINI_API_KEY)
     try:
         response = client.models.generate_content(
@@ -429,12 +430,15 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
     except Exception as e:
         return f"[圖片辨識說明]: {str(e)}"
 
-def call_ai_solver(question_text, retries=2):
+def call_ai_solver(question_text, subject="通用", retries=2):
     if not st.session_state.enable_gemini and not st.session_state.enable_openai:
         return "服務已關閉", "管理員目前已關閉所有AI解題服務系統。"
     if not GEMINI_API_KEY and not OPENAI_API_KEY:
         return "未設定 API Key", "請在 secrets.toml 中設定 API Key。"
-    prompt = f"{build_system_prompt()}\n\n題目需求與描述:\n{question_text}"
+    
+    sys_prompt = build_system_prompt(subject)
+    prompt = f"{sys_prompt}\n\n【{subject}】題目需求與描述:\n{question_text}"
+    
     for attempt in range(retries + 1):
         try:
             if GEMINI_API_KEY and st.session_state.enable_gemini:
@@ -452,8 +456,8 @@ def call_ai_solver(question_text, retries=2):
                     model=st.session_state.selected_openai_model,
                     response_format={"type": "json_object"},
                     messages=[
-                        {"role": "system", "content": build_system_prompt()},
-                        {"role": "user", "content": f"題目需求與描述:\n{question_text}"},
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": f"【{subject}】題目需求與描述:\n{question_text}"},
                     ],
                 )
                 data = json.loads(resp.choices[0].message.content)
@@ -594,7 +598,7 @@ if st.session_state.active_tab == "home":
         """,
         unsafe_allow_html=True,
     )
-    selected_subject = st.selectbox("科目", st.session_state.subjects, index=0)
+    selected_subject = st.selectbox("選擇題目科目", st.session_state.subjects, index=0)
     ref_answer = st.text_input("標準參考答案 (選填)", placeholder="例如 B、ACD、2.5 mol...")
     
     col_b1, col_b2 = st.columns([3, 1])
@@ -610,16 +614,16 @@ if st.session_state.active_tab == "home":
         elif not uploaded_files and not text_question.strip():
             st.warning("請輸入文字題目或上傳題目圖片！")
         else:
-            with st.spinner("A.lab AI 正在分析與解題中..."):
+            with st.spinner(f"A.lab AI 正在針對【{selected_subject}】進行分析與解題中..."):
                 images_to_process = cropped_images if cropped_images else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
-                ocr_text = extract_text_from_images(images_to_process, text_question) if images_to_process else ""
+                ocr_text = extract_text_from_images(images_to_process, text_question, subject=selected_subject) if images_to_process else ""
                 combined_question = ""
                 if text_question.strip():
                     combined_question += f"使用者文字題目/補充:\n{text_question.strip()}\n\n"
                 if ocr_text:
                     combined_question += f"圖片題目辨識內容:\n{ocr_text}"
                 
-                ans, reasoning = call_ai_solver(combined_question)
+                ans, reasoning = call_ai_solver(combined_question, subject=selected_subject)
                 images_b64 = [compress_and_to_b64(img) for img in images_to_process]
                 
                 new_record = {
@@ -764,9 +768,15 @@ elif st.session_state.active_tab == "admin":
         st.markdown(f'<div class="admin-stat-card"><div class="admin-stat-num" style="font-size:16px;">{ai_status}</div><div class="admin-stat-label">AI 引擎狀態</div></div>', unsafe_allow_html=True)
 
     st.write("")
-    admin_tab1, admin_tab2, admin_tab3, admin_tab4 = st.tabs(["使用者與權限", "解題點評與歷史紀錄", "AI 模型設定", "Bug回報"])
+    admin_tab1, admin_tab2, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
+        "使用者與權限", 
+        "📚 科目管理", 
+        "解題點評與歷史紀錄", 
+        "AI 模型設定", 
+        "Bug回報"
+    ])
 
-    # 1. 使用者管理 (新增/刪除學生帳號整合於此)
+    # 1. 使用者管理
     with admin_tab1:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### 👥 帳號總覽與狀態")
@@ -819,7 +829,6 @@ elif st.session_state.active_tab == "admin":
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.markdown("#### ❌ 刪除學生帳號")
             
-            # 安全過濾：排除管理員帳號以及當前登入的使用者
             deletable_users = [
                 u for u, d in st.session_state.users_db.items() 
                 if u != st.session_state.user_name and d.get("role") != "admin"
@@ -864,8 +873,53 @@ elif st.session_state.active_tab == "admin":
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. 全站紀錄與管理員點評
+    # 2. 📚 科目管理 (全新功能)
     with admin_tab2:
+        st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+        st.markdown("#### 📚 系統科目類別管理")
+        st.write("在此處新增或移除解題科目選單，修改後學生前端會同步更新，AI 也會根據所選科目採用對應專業解題模式。")
+        
+        # 顯示當前科目列表
+        st.markdown("**目前系統已啟用的科目列表：**")
+        subject_tags = " ".join([f"`{s}`" for s in st.session_state.subjects])
+        st.markdown(f"> {subject_tags}")
+        st.divider()
+
+        col_sub_add, col_sub_del = st.columns(2)
+
+        # ➕ 新增科目
+        with col_sub_add:
+            st.markdown("##### ➕ 新增科目")
+            new_subject_name = st.text_input("輸入新科目名稱", placeholder="例如：物理、歷史、英文...", key="new_sub_input")
+            if st.button("新增科目", use_container_width=True):
+                new_sub_clean = new_subject_name.strip()
+                if not new_sub_clean:
+                    st.error("請輸入科目名稱！")
+                elif new_sub_clean in st.session_state.subjects:
+                    st.error(f"科目 `{new_sub_clean}` 已經存在！")
+                else:
+                    st.session_state.subjects.append(new_sub_clean)
+                    save_config_from_session()
+                    st.success(f"成功新增科目：{new_sub_clean}！")
+                    st.rerun()
+
+        # ❌ 刪除科目
+        with col_sub_del:
+            st.markdown("##### ❌ 刪除科目")
+            if len(st.session_state.subjects) > 1:
+                del_subject_target = st.selectbox("選擇要刪除的科目", st.session_state.subjects, key="del_sub_select")
+                if st.button("確定刪除科目", use_container_width=True):
+                    st.session_state.subjects.remove(del_subject_target)
+                    save_config_from_session()
+                    st.warning(f"已成功刪除科目：{del_subject_target}")
+                    st.rerun()
+            else:
+                st.info("系統至少需保留一種科目，無法再刪除。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # 3. 全站紀錄與管理員點評
+    with admin_tab3:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### 學生題目巡檢與管理員點評")
         if not all_logs:
@@ -952,8 +1006,8 @@ elif st.session_state.active_tab == "admin":
                     st.toast("點評已儲存並成功更新統計！", icon="✅")
                     st.rerun()
 
-    # 3. AI 模型設定
-    with admin_tab3:
+    # 4. AI 模型設定
+    with admin_tab4:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### AI 模型引擎開關與模型切換")
         col_ai1, col_ai2 = st.columns(2)
@@ -971,8 +1025,8 @@ elif st.session_state.active_tab == "admin":
             st.success("已成功儲存 AI 模型設定與服務狀態！")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 4. Bug 回報
-    with admin_tab4:
+    # 5. Bug 回報
+    with admin_tab5:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### 使用者 Bug 與建議回報監控")
         reports = st.session_state.bug_reports
