@@ -1,6 +1,0 @@
-streamlit
-streamlit-cropper
-google-genai
-openai
-anthropic
-Pillow
