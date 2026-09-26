@@ -26,9 +26,9 @@ def get_taipei_now_str():
 def get_taipei_today_str():
     return datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d")
 
-# =========================================================
+# ====================
 # 0. 資料庫與設定檔機制
-# =========================================================
+# ====================
 CONFIG_FILE = "config.json"
 FILE_LOCK = threading.Lock()
 
@@ -118,22 +118,19 @@ def save_config_from_session():
     }
     save_config(config_data)
 
-# 【優化 1】：圖片自動等比例縮放與壓縮機制
 def compress_and_to_b64(img: Image.Image, max_size=(1024, 1024), quality=75) -> str:
-    """自動將圖片轉換格式、縮放並進行 JPEG 壓縮，大幅降低記憶體與存儲開銷"""
+    """自動將圖片轉換格式、縮放並進行JPEG 壓縮"""
     img_copy = img.copy()
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
-    
     img_copy.thumbnail(max_size, Image.Resampling.LANCZOS)
-    
     buffered = BytesIO()
     img_copy.save(buffered, format="JPEG", quality=quality)
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-# =========================================================
+# ====================
 # 1. 頁面初始化與多色彩樣式
-# =========================================================
+# ====================
 st.set_page_config(page_title="A.lab | 解題實驗室", page_icon="🧪", layout="centered")
 config = load_config()
 
@@ -228,10 +225,8 @@ st.markdown(
             color: #F8FAFC !important;
         }}
     }}
-    
     header[data-testid="stHeader"] {{ visibility: hidden; }}
     footer {{ visibility: hidden; }}
-    
     .custom-card {{
         background: {current_theme["card_bg"]} !important;
         border: 1.5px solid {current_theme["card_border"]} !important;
@@ -241,7 +236,6 @@ st.markdown(
         box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
         color: #F8FAFC !important;
     }}
-
     .admin-stat-card {{
         background: {current_theme["card_bg"]} !important;
         border: 1px solid {current_theme["card_border"]} !important;
@@ -259,7 +253,6 @@ st.markdown(
         color: #94A3B8 !important;
         margin-top: 2px;
     }}
-    
     .top-header {{
         display: flex;
         justify-content: space-between;
@@ -279,7 +272,6 @@ st.markdown(
         font-size: 11px !important;
         color: #94A3B8 !important;
     }}
-    
     .user-avatar {{
         width: 42px;
         height: 42px;
@@ -299,7 +291,6 @@ st.markdown(
         padding: 6px 12px;
         text-align: right;
     }}
-    
     .step-number {{
         display: inline-block;
         width: 22px;
@@ -313,7 +304,6 @@ st.markdown(
         font-weight: bold;
         margin-right: 6px;
     }}
-
     div.stButton > button {{
         background: {current_theme["primary_btn"]} !important;
         color: {current_theme["btn_text"]} !important;
@@ -328,13 +318,11 @@ st.markdown(
         box-shadow: 0 0 12px {current_theme["highlight"]} !important;
     }}
     div.stButton > button p {{ color: {current_theme["btn_text"]} !important; }}
-
     .secondary-btn div.stButton > button {{
         background: #1E293B !important;
         border: 1px solid {current_theme["card_border"]} !important;
     }}
     .secondary-btn div.stButton > button p {{ color: #CBD5E1 !important; }}
-
     input, textarea, div[data-baseweb="input"] > div {{
         background-color: #0F172A !important;
         color: #F8FAFC !important;
@@ -347,9 +335,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# =========================================================
+# ====================
 # 2. 登入邏輯
-# =========================================================
+# ====================
 if not st.session_state.logged_in:
     st.markdown(
         """
@@ -363,16 +351,13 @@ if not st.session_state.logged_in:
         """,
         unsafe_allow_html=True,
     )
-
     if st.session_state.must_change_pwd:
         with st.container():
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-            st.markdown("### 🔒 初次登入 - 請修改密碼")
+            st.markdown("### 初次登入 - 請修改密碼")
             st.info("為了您的帳號安全，第一次登入請設定新密碼！")
-            
             new_pwd = st.text_input("輸入新密碼", type="password", placeholder="請輸入新密碼")
             confirm_pwd = st.text_input("確認新密碼", type="password", placeholder="請再次輸入新密碼")
-            
             if st.button("確認修改並登入", use_container_width=True):
                 if not new_pwd:
                     st.error("新密碼不可為空白！")
@@ -382,26 +367,22 @@ if not st.session_state.logged_in:
                     user_n = st.session_state.temp_user
                     st.session_state.users_db[user_n]["password"] = new_pwd
                     st.session_state.users_db[user_n]["first_login"] = False
-                    
                     st.session_state.logged_in = True
                     st.session_state.must_change_pwd = False
                     st.session_state.user_name = user_n
                     st.session_state.user_role = st.session_state.users_db[user_n].get("role", "user")
                     st.session_state.login_logs.append({"user": user_n, "time": get_taipei_now_str()})
                     save_config_from_session()
-                    
                     st.success("密碼修改成功！正在進入系統...")
                     st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
-        st.stop()
-
+            st.stop()
     else:
         with st.container():
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-            st.markdown("### 🔑 使用者登入")
+            st.markdown("### 使用者登入")
             input_username = st.text_input("帳號", placeholder="請輸入帳號")
             input_password = st.text_input("密碼", type="password", placeholder="請輸入密碼")
-            
             if st.button("登入系統", use_container_width=True):
                 users = st.session_state.users_db
                 if input_username in users and users[input_username]["password"] == input_password:
@@ -415,30 +396,30 @@ if not st.session_state.logged_in:
                         st.session_state.user_role = users[input_username].get("role", "user")
                         st.session_state.login_logs.append({"user": input_username, "time": get_taipei_now_str()})
                         save_config_from_session()
-                        st.toast(f"🎉 歡迎回來，{input_username}！", icon="✅")
+                        st.toast(f"歡迎回來, {input_username}！", icon="👋")
                         st.rerun()
                 else:
                     st.error("帳號或密碼錯誤，請重新確認！")
             st.markdown('</div>', unsafe_allow_html=True)
-        st.stop()
+            st.stop()
 
-# =========================================================
+# ====================
 # 3. AI 核心邏輯
-# =========================================================
+# ====================
 def build_system_prompt():
     return """你是一位專業嚴謹的萬能AI導師。
-請針對使用者提出的問題（無論是文字敘述或圖片題目）進行精準解答與深度邏輯剖析。
+請針對使用者提出的問題(無論是文字敘述或圖片題目)進行精準解答與深度邏輯剖析。
 請嚴格回傳JSON格式(不要包裹在 markdown codeblock 中):
 {
-  "ans": "正確答案選項或簡短最終結果",
-  "reasoning": "步驟清晰、邏輯嚴謹的詳細觀念推導過程"
+    "ans": "正確答案選項或簡短最終結果",
+    "reasoning": "步驟清晰、邏輯嚴謹的詳細觀念推導過程"
 }
-遇到公式請使用標準 LaTeX 語法(如 $E=mc^2$)。請以繁體中文回答。"""
+遇到公式請使用標準 LaTeX 語法(如 $E=mc^{2}$)。請以繁體中文回答。"""
 
 def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
     if not GEMINI_API_KEY or not image_list or not st.session_state.enable_gemini:
         return ""
-    ocr_prompt = f"請詳細轉錄圖片中的所有題目文字、選項與公式。補充文字描述: {extra_info}"
+    ocr_prompt = f"請詳細轉錄圖片中的所有題目文字、選項與公式。補充文字描述:\n{extra_info}"
     client = genai.Client(api_key=GEMINI_API_KEY)
     try:
         response = client.models.generate_content(
@@ -448,19 +429,14 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
     except Exception as e:
         return f"[圖片辨識說明]: {str(e)}"
 
-# 【優化 2】：強健 AI 解題核心（支援自動重試與格式錯失捕捉）
 def call_ai_solver(question_text, retries=2):
     if not st.session_state.enable_gemini and not st.session_state.enable_openai:
-        return "服務已關閉", "管理員目前已關閉所有 AI 解題服務系統。"
-
+        return "服務已關閉", "管理員目前已關閉所有AI解題服務系統。"
     if not GEMINI_API_KEY and not OPENAI_API_KEY:
         return "未設定 API Key", "請在 secrets.toml 中設定 API Key。"
-    
     prompt = f"{build_system_prompt()}\n\n題目需求與描述:\n{question_text}"
-    
     for attempt in range(retries + 1):
         try:
-            # 優先選用 Gemini
             if GEMINI_API_KEY and st.session_state.enable_gemini:
                 client = genai.Client(api_key=GEMINI_API_KEY)
                 resp = client.models.generate_content(
@@ -469,8 +445,7 @@ def call_ai_solver(question_text, retries=2):
                 raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
                 data = json.loads(raw)
                 return data.get("ans", "無解答"), data.get("reasoning", "無解析內容")
-
-            # 次選 OpenAI
+            
             if OPENAI_API_KEY and st.session_state.enable_openai:
                 client = OpenAI(api_key=OPENAI_API_KEY)
                 resp = client.chat.completions.create(
@@ -483,23 +458,21 @@ def call_ai_solver(question_text, retries=2):
                 )
                 data = json.loads(resp.choices[0].message.content)
                 return data.get("ans", "無解答"), data.get("reasoning", "無解析內容")
-
         except json.JSONDecodeError:
             if attempt < retries:
                 time.sleep(1)
                 continue
-            return "解析格式錯誤", "AI 回傳格式不符 JSON 規範，請重試一次。"
+            return "解析格式錯誤", "AI回傳格式不符 JSON 規範，請重試一次。"
         except Exception as e:
             if attempt < retries:
                 time.sleep(1)
                 continue
-            return "解析失敗", f"呼叫 AI 時發生錯誤: {str(e)}"
+            return "解析失敗", f"呼叫AI時發生錯誤: {str(e)}"
+    return "解析失敗", "無法存取AI模型或相關服務連線逾時。"
 
-    return "解析失敗", "無法存取 AI 模型或相關服務連線逾時。"
-
-# =========================================================
+# ====================
 # 4. 主介面 Header 與用戶資訊卡片
-# =========================================================
+# ====================
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
     st.markdown(
@@ -521,11 +494,11 @@ with col_h2:
         "主題色彩",
         options=["dark_blue", "emerald", "purple", "sunset_orange", "sakura_pink"],
         format_func=lambda x: {
-            "dark_blue": "🌌 深藍",
-            "emerald": "🌲 翡翠綠",
-            "purple": "🔮 夢幻紫",
-            "sunset_orange": "🔥 熾焰橘",
-            "sakura_pink": "🌸 櫻花粉",
+            "dark_blue": "深藍",
+            "emerald": "翡翠綠",
+            "purple": "夢幻紫",
+            "sunset_orange": "熾焰橘",
+            "sakura_pink": "櫻花粉",
         }[x],
         index=["dark_blue", "emerald", "purple", "sunset_orange", "sakura_pink"].index(st.session_state.theme_color),
         label_visibility="collapsed",
@@ -536,7 +509,6 @@ with col_h2:
         st.rerun()
 
 st.write("")
-
 user_name = st.session_state.user_name
 user_info = st.session_state.users_db.get(user_name, {"class_name": "學生", "used_today": 0, "custom_limit": 15})
 class_name = user_info.get("class_name", "學生")
@@ -572,17 +544,15 @@ with col_head2:
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.write("")
-
 is_admin = st.session_state.get("user_role") == "admin"
 cols = st.columns(4 if is_admin else 3)
-
 if cols[0].button("🏠 首頁", use_container_width=True):
     st.session_state.active_tab = "home"
     st.rerun()
-if cols[1].button("✨ 最新解析", use_container_width=True):
+if cols[1].button("💡 最新解析", use_container_width=True):
     st.session_state.active_tab = "analysis"
     st.rerun()
-if cols[2].button("📋 解題紀錄", use_container_width=True):
+if cols[2].button("📚 解題紀錄", use_container_width=True):
     st.session_state.active_tab = "history"
     st.rerun()
 if is_admin and cols[3].button("⚙️ 後台", use_container_width=True):
@@ -591,38 +561,31 @@ if is_admin and cols[3].button("⚙️ 後台", use_container_width=True):
 
 st.divider()
 
-# =========================================================
+# ====================
 # 5. 頁面分流邏輯
-# =========================================================
-
+# ====================
 # --- TAB 1: 首頁 ---
 if st.session_state.active_tab == "home":
     st.markdown(
         """
         <div style="font-size: 15px; font-weight: bold; color: #FFFFFF; margin-bottom: 8px;">
-            <span class="step-number">1</span> 輸入文字題目 或 上傳圖片
+            <span class="step-number">1</span> 輸入文字題目或上傳圖片
         </div>
         """,
         unsafe_allow_html=True,
     )
+    text_question = st.text_area("文字題目描述 (可直接貼上題目文字、觀念問題)", placeholder="例如:請幫我解釋氧化還原反應中,氧化劑與還原劑的判斷方式...", height=120)
+    uploaded_files = st.file_uploader("上傳題目圖片 (選填, 可1~5張)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
     
-    text_question = st.text_area("📝 文字題目描述（可直接貼上題目文字、觀念問題）", placeholder="例如：請幫我解釋氧化還原反應中，氧化劑與還原劑的判斷方式...", height=120)
-    
-    uploaded_files = st.file_uploader(
-        "📷 上傳題目圖片（選填，可 1~5 張）",
-        type=["png", "jpg", "jpeg"],
-        accept_multiple_files=True,
-    )
-
     cropped_images = []
     if uploaded_files:
-        st.markdown("#### ✂️ 圖片裁切預覽")
+        st.markdown("#### 圖片裁切預覽")
         for i, f in enumerate(uploaded_files):
             img = Image.open(f)
-            st.write(f"圖片 {i+1}:")
+            st.write(f"圖片{i+1}:")
             cropped_img = st_cropper(img, realtime_update=True, box_color=current_theme["highlight"], aspect_ratio=None, key=f"crop_{i}")
             cropped_images.append(cropped_img)
-
+            
     st.markdown(
         """
         <div style="font-size: 15px; font-weight: bold; color: #FFFFFF; margin-top: 16px; margin-bottom: 8px;">
@@ -631,38 +594,34 @@ if st.session_state.active_tab == "home":
         """,
         unsafe_allow_html=True,
     )
-    
     selected_subject = st.selectbox("科目", st.session_state.subjects, index=0)
-    ref_answer = st.text_input("標準參考答案 選填", placeholder="例如 B、ACD、2.5 mol...")
-
+    ref_answer = st.text_input("標準參考答案 (選填)", placeholder="例如 B、ACD、2.5 mol...")
+    
     col_b1, col_b2 = st.columns([3, 1])
     submit_btn = col_b1.button("開始解題", use_container_width=True)
     with col_b2:
         st.markdown('<div class="secondary-btn">', unsafe_allow_html=True)
         clear_btn = st.button("清除", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
+        
     if submit_btn:
         if isinstance(remains, int) and remains <= 0:
-            st.error("今日解題額度已用完，請明日再試！")
+            st.error("今日解題額度已用完, 請明日再試！")
         elif not uploaded_files and not text_question.strip():
             st.warning("請輸入文字題目或上傳題目圖片！")
         else:
-            with st.spinner("🌀 A.lab AI 正在分析與解題中..."):
+            with st.spinner("A.lab AI 正在分析與解題中..."):
                 images_to_process = cropped_images if cropped_images else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
                 ocr_text = extract_text_from_images(images_to_process, text_question) if images_to_process else ""
-                
                 combined_question = ""
                 if text_question.strip():
                     combined_question += f"使用者文字題目/補充:\n{text_question.strip()}\n\n"
                 if ocr_text:
                     combined_question += f"圖片題目辨識內容:\n{ocr_text}"
-
-                ans, reasoning = call_ai_solver(combined_question)
                 
-                # 【套用圖片壓縮優化】
+                ans, reasoning = call_ai_solver(combined_question)
                 images_b64 = [compress_and_to_b64(img) for img in images_to_process]
-
+                
                 new_record = {
                     "id": str(time.time()),
                     "user": user_name,
@@ -674,55 +633,53 @@ if st.session_state.active_tab == "home":
                     "reasoning": reasoning,
                     "images_b64": images_b64,
                     "admin_feedback": {
-                        "status": "pending",  # 'correct', 'incorrect', 'pending'
+                        "status": "pending",
                         "comment": "",
                     },
                 }
-                
                 st.session_state.history_logs.append(new_record)
                 st.session_state.latest_analysis = new_record
                 user_info["used_today"] += 1
                 save_config_from_session()
-                st.toast("✅ 解題完成！", icon="🎉")
+                st.toast("解題完成！", icon="🎉")
                 st.session_state.active_tab = "analysis"
                 st.rerun()
 
 # --- TAB 2: 解析結果 ---
 elif st.session_state.active_tab == "analysis":
-    st.markdown("### ✨ 最新解題觀念解析")
+    st.markdown("### 最新解題觀念解析")
     if "latest_analysis" in st.session_state and st.session_state.latest_analysis:
         res = st.session_state.latest_analysis
         feedback = res.get("admin_feedback", {})
         status = feedback.get("status", "pending")
         comment = feedback.get("comment", "")
-
+        
         status_badge = ""
         if status == "correct":
-            status_badge = "<span style='background:#059669; color:white; padding:2px 8px; border-radius:6px; font-size:12px;'>✅ 管理員審核：正確</span>"
+            status_badge = "<span style='background:#059669; color:white; padding:2px 8px; border-radius:6px; font-size:12px;'>管理員審核:正確</span>"
         elif status == "incorrect":
-            status_badge = "<span style='background:#DC2626; color:white; padding:2px 8px; border-radius:6px; font-size:12px;'>❌ 管理員審核：需再加強</span>"
-
+            status_badge = "<span style='background:#DC2626; color:white; padding:2px 8px; border-radius:6px; font-size:12px;'>管理員審核:需再加強</span>"
+            
         st.markdown(
             f"""
             <div class="custom-card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+                <div style="display: flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
                     <div style="color: {current_theme['highlight']}; font-weight: bold; font-size: 16px;">[{res['subject']}] 觀念拆解與解答</div>
                     <div>{status_badge}</div>
                 </div>
                 <div style="font-size: 13px; color: #94A3B8; margin-bottom: 6px;">標準參考答案: <b style="color:#FFFFFF;">{res['ref_answer']}</b> | AI 答案: <b style="color:{current_theme['highlight']};">{res['ans']}</b></div>
                 <div style="font-size: 14px; line-height: 1.6; color: #F8FAFC; white-space: pre-line; margin-top: 10px;">
-                <b>觀念推導過程:</b>\n{res['reasoning']}
+                    <b>觀念推導過程:</b>\n{res['reasoning']}
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-
         if comment:
             st.markdown(
                 f"""
                 <div class="custom-card" style="border-color: #F59E0B !important;">
-                    <div style="color: #F59E0B; font-weight: bold; font-size: 14px; margin-bottom: 4px;">👑 管理員點評與觀念加強：</div>
+                    <div style="color: #F59E0B; font-weight: bold; font-size: 14px; margin-bottom: 4px;">📌 管理員點評與觀念加強:</div>
                     <div style="font-size: 13px; color: #F8FAFC;">{comment}</div>
                 </div>
                 """,
@@ -733,15 +690,14 @@ elif st.session_state.active_tab == "analysis":
 
 # --- TAB 3: 我的解題紀錄 ---
 elif st.session_state.active_tab == "history":
-    st.markdown("### 📋 我的解題紀錄")
+    st.markdown("### 我的解題紀錄")
     search_kw = st.text_input("搜尋關鍵字", placeholder="搜尋答案、題目文字、解析內容...", label_visibility="collapsed")
-    
     logs = [l for l in st.session_state.history_logs if l.get("user") == user_name or is_admin]
+    
     if search_kw:
         logs = [l for l in logs if search_kw.lower() in str(l).lower()]
-
     st.caption(f"共 {len(logs)} 筆紀錄")
-
+    
     if not logs:
         st.info("尚無解題紀錄！")
     else:
@@ -749,18 +705,17 @@ elif st.session_state.active_tab == "history":
             img_count = len(item.get("images_b64", []))
             feedback = item.get("admin_feedback", {})
             status = feedback.get("status", "pending")
-            
             tag_html = ""
             if status == "correct":
-                tag_html = "<span style='color:#34D399; font-size:11px; margin-left:6px;'>[✅ 已核可]</span>"
+                tag_html = "<span style='color:#34D399; font-size: 11px; margin-left:6px;'>[已核可]</span>"
             elif status == "incorrect":
-                tag_html = "<span style='color:#F87171; font-size:11px; margin-left:6px;'>[⚠️ 需加強]</span>"
-
+                tag_html = "<span style='color:#F87171; font-size:11px; margin-left: 6px;'>[! 需加強]</span>"
+                
             st.markdown(
                 f"""
                 <div class="custom-card" style="display: flex; gap: 12px; align-items: flex-start;">
                     <div style="width: 65px; height: 65px; background: #1E293B; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #94A3B8;">
-                        { f'📷 {img_count}張' if img_count > 0 else '📝 文字' }
+                        {f'📷 {img_count}張' if img_count > 0 else '📝 文字'}
                     </div>
                     <div style="flex: 1;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -780,22 +735,20 @@ elif st.session_state.active_tab == "history":
 # --- TAB 4: 後台管理員系統 ---
 elif st.session_state.active_tab == "admin":
     if not is_admin:
-        st.error("⛔ 存取被拒絕：您沒有進入後台管理系統的權限！")
+        st.error("存取被拒絕: 您沒有進入後台管理系統的權限！")
         if st.button("返回首頁"):
             st.session_state.active_tab = "home"
             st.rerun()
         st.stop()
 
-    # 計算正確率
     all_logs = st.session_state.history_logs
     total_logs_cnt = len(all_logs)
-    
     reviewed_logs = [l for l in all_logs if l.get("admin_feedback", {}).get("status") in ["correct", "incorrect"]]
     correct_cnt = sum(1 for l in reviewed_logs if l.get("admin_feedback", {}).get("status") == "correct")
     accuracy_rate = (correct_cnt / len(reviewed_logs) * 100) if reviewed_logs else 0.0
 
     st.markdown("<h3 style='margin-bottom: 12px;'>⚙️ A.lab 後台管理系統</h3>", unsafe_allow_html=True)
-    
+
     total_users_cnt = len(st.session_state.users_db)
     bug_cnt = len(st.session_state.bug_reports)
     ai_status = "🟢 正常" if (st.session_state.enable_gemini or st.session_state.enable_openai) else "🔴 停用"
@@ -806,67 +759,115 @@ elif st.session_state.active_tab == "admin":
     with m_col2:
         st.markdown(f'<div class="admin-stat-card"><div class="admin-stat-num">{total_logs_cnt}</div><div class="admin-stat-label">累積解題量</div></div>', unsafe_allow_html=True)
     with m_col3:
-        st.markdown(f'<div class="admin-stat-card"><div class="admin-stat-num">{accuracy_rate:.1f}%</div><div class="admin-stat-label">解答正確率 ({len(reviewed_logs)}筆已審)</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="admin-stat-card"><div class="admin-stat-num">{accuracy_rate:.1f}%</div><div class="admin-stat-label">解答正確率({len(reviewed_logs)}筆已審)</div></div>', unsafe_allow_html=True)
     with m_col4:
         st.markdown(f'<div class="admin-stat-card"><div class="admin-stat-num" style="font-size:16px;">{ai_status}</div><div class="admin-stat-label">AI 引擎狀態</div></div>', unsafe_allow_html=True)
 
     st.write("")
+    admin_tab1, admin_tab2, admin_tab3, admin_tab4 = st.tabs(["使用者與權限", "解題點評與歷史紀錄", "AI 模型設定", "Bug回報"])
 
-    admin_tab1, admin_tab2, admin_tab3, admin_tab4 = st.tabs(["👥 使用者與權限", "📜 解題點評與歷史紀錄", "🤖 AI 模型設定", "🐞 Bug 回報"])
-    
-    # 1. 使用者管理
+    # 1. 使用者管理 (新增/刪除學生帳號整合於此)
     with admin_tab1:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### 👥 帳號總覽與狀態")
-        
         user_rows = []
         for uname, udata in st.session_state.users_db.items():
             user_rows.append({
                 "帳號": uname,
                 "身分類別": udata.get("class_name", "學生"),
-                "權限角色": "👑 管理員" if udata.get("role") == "admin" else "👤 一般使用者",
-                "今日已用": f"{udata.get('used_today', 0)} 題",
-                "每日額度上限": f"{udata.get('custom_limit', 15)} 題",
-                "首次登入狀態": "⚠️ 待修改密碼" if udata.get("first_login") else "✅ 已修改密碼",
+                "權限角色": "管理員" if udata.get("role") == "admin" else "一般使用者",
+                "今日已用": f"{udata.get('used_today', 0)}題",
+                "每日額度上限": f"{udata.get('custom_limit', 15)}題",
+                "首次登入狀態": "待修改密碼" if udata.get("first_login") else "已修改密碼",
             })
-        
         st.dataframe(pd.DataFrame(user_rows), use_container_width=True, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+        col_add, col_del = st.columns(2)
+
+        # ➕ 新增學生帳號
+        with col_add:
+            st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+            st.markdown("#### ➕ 新增學生帳號")
+            new_username = st.text_input("輸入新學生帳號", key="new_u_name", placeholder="例如：張小明")
+            new_password = st.text_input("預設密碼", value="2580", type="password", key="new_u_pwd")
+            new_limit = st.number_input("每日解題額度", min_value=1, max_value=99999, value=15, key="new_u_limit")
+            
+            if st.button("新增帳號", use_container_width=True):
+                new_username = new_username.strip()
+                if not new_username:
+                    st.error("請輸入學生帳號！")
+                elif new_username in st.session_state.users_db:
+                    st.error(f"帳號 `{new_username}` 已經存在！")
+                else:
+                    st.session_state.users_db[new_username] = {
+                        "password": new_password,
+                        "class_name": "學生",
+                        "role": "user",
+                        "first_login": True,
+                        "used_today": 0,
+                        "total_used": 0,
+                        "custom_limit": new_limit,
+                    }
+                    save_config_from_session()
+                    st.success(f"成功新增學生：{new_username}！")
+                    st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # ❌ 刪除學生帳號
+        with col_del:
+            st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+            st.markdown("#### ❌ 刪除學生帳號")
+            
+            # 安全過濾：排除管理員帳號以及當前登入的使用者
+            deletable_users = [
+                u for u, d in st.session_state.users_db.items() 
+                if u != st.session_state.user_name and d.get("role") != "admin"
+            ]
+            
+            if deletable_users:
+                user_to_delete = st.selectbox("選擇要刪除的學生帳號", deletable_users)
+                if st.button("確定刪除帳號", use_container_width=True):
+                    del st.session_state.users_db[user_to_delete]
+                    save_config_from_session()
+                    st.warning(f"已成功刪除學生帳號：{user_to_delete}")
+                    st.rerun()
+            else:
+                st.info("目前沒有可供刪除的一般學生帳號。")
+                
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # 額度調整
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-        st.markdown("#### ⚡ 解題額度調整機制")
-        
-        st.markdown("**1. 快速批量統一設定（全體一般使用者）**")
+        st.markdown("#### 解題額度調整機制")
+        st.markdown("**1. 快速批量統一設定 (全體一般使用者)**")
         col_all1, col_all2 = st.columns([3, 1])
-        all_limit_val = col_all1.number_input("設定每日統一解題上限（題）", min_value=1, max_value=99999, value=15, key="all_limit_input")
+        all_limit_val = col_all1.number_input("設定每日統一解題上限(題)", min_value=1, max_value=99999, value=15, key="all_limit_input")
         if col_all2.button("套用至全體", use_container_width=True):
             for u_name, u_data in st.session_state.users_db.items():
                 if u_data.get("role") != "admin":
                     u_data["custom_limit"] = all_limit_val
             save_config_from_session()
-            st.success(f"已將所有一般使用者的每日上限調至 {all_limit_val} 題！")
+            st.success(f"已將所有一般使用者的每日上限調至 {all_limit_val} 題!")
             st.rerun()
-
+            
         st.divider()
-
         st.markdown("**2. 單一指定帳號獨立調整**")
         selected_user = st.selectbox("選擇要修改的帳號", list(st.session_state.users_db.keys()))
         current_u_limit = int(st.session_state.users_db[selected_user].get("custom_limit", 15))
-        
         col_single1, col_single2 = st.columns([3, 1])
         new_limit = col_single1.number_input(f"設定 {selected_user} 的每日解題額度", min_value=1, max_value=99999, value=current_u_limit, key="custom_limit_input")
         if col_single2.button("儲存個別設定", use_container_width=True):
             st.session_state.users_db[selected_user]["custom_limit"] = new_limit
             save_config_from_session()
-            st.success(f"已更新 {selected_user} 的每日額度為 {new_limit} 題！")
+            st.success(f"已更新 {selected_user} 的每日額度為 {new_limit} 題!")
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
     # 2. 全站紀錄與管理員點評
     with admin_tab2:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-        st.markdown("#### 📜 學生題目巡檢與管理員點評")
-        
+        st.markdown("#### 學生題目巡檢與管理員點評")
         if not all_logs:
             st.info("目前尚無任何解題紀錄。")
         else:
@@ -880,18 +881,16 @@ elif st.session_state.active_tab == "admin":
                 filtered_logs = [l for l in filtered_logs if l.get("user") == selected_filter_user]
             if search_query:
                 filtered_logs = [l for l in filtered_logs if search_query.lower() in str(l).lower()]
-
+                
             st.caption(f"符合條件的紀錄共 {len(filtered_logs)} 筆")
-
             table_data = []
             for item in reversed(filtered_logs):
                 fb_status = item.get("admin_feedback", {}).get("status", "pending")
-                status_str = "⏳ 未審核"
+                status_str = "未審核"
                 if fb_status == "correct":
-                    status_str = "✅ 正確"
+                    status_str = "正確"
                 elif fb_status == "incorrect":
-                    status_str = "❌ 需加強"
-
+                    status_str = "需加強"
                 table_data.append({
                     "時間": item.get("time", "未知"),
                     "使用者": item.get("user", "未知"),
@@ -900,83 +899,72 @@ elif st.session_state.active_tab == "admin":
                     "管理員審核": status_str,
                     "題目/文字備註": item.get("note", "無"),
                 })
-            
             st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-            st.markdown("#### 📝 審核點評與答對率計算")
-            for idx, log in enumerate(reversed(filtered_logs)):
-                log_id = log.get("id", f"log_{idx}")
-                feedback = log.get("admin_feedback", {"status": "pending", "comment": ""})
+        st.markdown("#### 審核點評與答對率計算")
+        for idx, log in enumerate(reversed(filtered_logs)):
+            log_id = log.get("id", f"log_{idx}")
+            feedback = log.get("admin_feedback", {"status": "pending", "comment": ""})
+            with st.expander(f"[{log.get('time')}] {log.get('user')} - {log.get('subject')} (AI答案: {log.get('ans')})"):
+                st.markdown(f"**發問學生:** `{log.get('user')}` | **科目:** `{log.get('subject')}` | **提問時間:** `{log.get('time')}`")
+                st.markdown(f"**標註參考答案:** {log.get('ref_answer')}")
+                st.markdown(f"**題目文字描述:**\n{log.get('note')}")
+                st.markdown(f"**AI 答案:** `{log.get('ans')}`")
+                st.markdown(f"**觀念詳細推導解析:**\n{log.get('reasoning')}")
+                if log.get("images_b64"):
+                    st.write("上傳題目原圖:")
+                    img_cols = st.columns(min(len(log["images_b64"]), 3))
+                    for i, img_b64 in enumerate(log["images_b64"]):
+                        try:
+                            img_bytes = base64.b64decode(img_b64)
+                            img_cols[i % 3].image(img_bytes, caption=f"圖片{i+1}", use_column_width=True)
+                        except Exception:
+                            pass
+                st.divider()
+                st.markdown("##### 管理員點評區 (將計入正確率統計)")
+                c_col1, c_col2 = st.columns([1, 2])
+                current_status = feedback.get("status", "pending")
+                status_idx = 0
+                if current_status == "correct": status_idx = 1
+                elif current_status == "incorrect": status_idx = 2
                 
-                with st.expander(f"🕒 [{log.get('time')}] {log.get('user')} - {log.get('subject')} (AI答案: {log.get('ans')})"):
-                    st.markdown(f"**發問學生：** `{log.get('user')}` | **科目：** `{log.get('subject')}` | **提問時間：** `{log.get('time')}`")
-                    st.markdown(f"**標註參考答案：** `{log.get('ref_answer')}`")
-                    st.markdown(f"**題目文字描述：**\n{log.get('note')}")
-                    st.markdown(f"**AI 答案：** `{log.get('ans')}`")
-                    st.markdown(f"**觀念詳細推導解析：**\n{log.get('reasoning')}")
-                    
-                    if log.get("images_b64"):
-                        st.write("📷 上傳題目原圖：")
-                        img_cols = st.columns(min(len(log["images_b64"]), 3))
-                        for i, img_b64 in enumerate(log["images_b64"]):
-                            try:
-                                img_bytes = base64.b64decode(img_b64)
-                                img_cols[i % 3].image(img_bytes, caption=f"圖片 {i+1}", use_column_width=True)
-                            except Exception:
-                                pass
-
-                    st.divider()
-                    st.markdown("##### 👑 管理員點評區（將計入正確率統計）")
-                    
-                    c_col1, c_col2 = st.columns([1, 2])
-                    current_status = feedback.get("status", "pending")
-                    
-                    status_idx = 0
-                    if current_status == "correct": status_idx = 1
-                    elif current_status == "incorrect": status_idx = 2
-                    
-                    new_status_choice = c_col1.radio(
-                        "AI 解題正確度評定",
-                        options=["pending", "correct", "incorrect"],
-                        format_func=lambda x: {"pending": "⏳ 待審核", "correct": "✅ 回答正確", "incorrect": "❌ 回答錯誤/需補強"}[x],
-                        index=status_idx,
-                        key=f"status_radio_{log_id}",
-                    )
-                    
-                    new_comment = c_col2.text_area(
-                        "正確回應與觀念再加強補充",
-                        value=feedback.get("comment", ""),
-                        placeholder="請輸入給學生的觀念補充、錯誤更正或學習建議...",
-                        key=f"comment_text_{log_id}",
-                        height=100,
-                    )
-                    
-                    if st.button("儲存點評評語", key=f"save_fb_{log_id}"):
-                        log["admin_feedback"] = {
-                            "status": new_status_choice,
-                            "comment": new_comment,
-                        }
-                        save_config_from_session()
-                        st.toast("✅ 點評已儲存並成功更新統計！", icon="🎉")
-                        st.rerun()
+                new_status_choice = c_col1.radio(
+                    "AI 解題正確度評定",
+                    options=["pending", "correct", "incorrect"],
+                    format_func=lambda x: {"pending": "待審核", "correct": "回答正確", "incorrect": "回答錯誤/需補強"}[x],
+                    index=status_idx,
+                    key=f"status_radio_{log_id}",
+                )
+                new_comment = c_col2.text_area(
+                    "正確回應與觀念再加強補充",
+                    value=feedback.get("comment", ""),
+                    placeholder="請輸入給學生的觀念補充、錯誤更正或學習建議...",
+                    key=f"comment_text_{log_id}",
+                    height=100,
+                )
+                if st.button("儲存點評評語", key=f"save_fb_{log_id}"):
+                    log["admin_feedback"] = {
+                        "status": new_status_choice,
+                        "comment": new_comment,
+                    }
+                    save_config_from_session()
+                    st.toast("點評已儲存並成功更新統計！", icon="✅")
+                    st.rerun()
 
     # 3. AI 模型設定
     with admin_tab3:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-        st.markdown("#### 🤖 AI 模型引擎開關與模型切換")
-        
+        st.markdown("#### AI 模型引擎開關與模型切換")
         col_ai1, col_ai2 = st.columns(2)
         with col_ai1:
-            st.markdown("##### 🔹 Google Gemini")
+            st.markdown("##### Google Gemini")
             st.session_state.enable_gemini = st.toggle("啟用 Gemini AI 解題引擎", value=st.session_state.enable_gemini)
             st.session_state.selected_gemini_model = st.text_input("Gemini 模型識別碼", value=st.session_state.selected_gemini_model)
-        
         with col_ai2:
-            st.markdown("##### 🔸 OpenAI GPT")
+            st.markdown("##### OpenAI GPT")
             st.session_state.enable_openai = st.toggle("啟用 OpenAI 解題引擎", value=st.session_state.enable_openai)
             st.session_state.selected_openai_model = st.text_input("OpenAI 模型識別碼", value=st.session_state.selected_openai_model)
-
         st.write("")
         if st.button("儲存 AI 模型設定", use_container_width=True):
             save_config_from_session()
@@ -986,10 +974,10 @@ elif st.session_state.active_tab == "admin":
     # 4. Bug 回報
     with admin_tab4:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-        st.markdown("#### 🐞 使用者 Bug 與建議回報監控")
+        st.markdown("#### 使用者 Bug 與建議回報監控")
         reports = st.session_state.bug_reports
         if not reports:
-            st.info("🎉 目前沒有任何待處理的問題回報！")
+            st.info("目前沒有任何待處理的問題回報！")
         else:
             for i, rep in enumerate(reports):
                 st.markdown(f"**回報 #{i+1}**")
