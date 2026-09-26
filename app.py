@@ -635,7 +635,7 @@ elif st.session_state.active_tab == "admin":
         st.stop()
 
     st.markdown("### ⚙️ A.lab 後台管理系統")
-    admin_tab1, admin_tab2, admin_tab3 = st.tabs(["👥 使用者列表與權限設定", "🤖 AI 模型設定", "🐞 Bug 回報處理"])
+    admin_tab1, admin_tab2, admin_tab3, admin_tab4 = st.tabs(["👥 使用者列表與權限設定", "📜 所有人解題紀錄", "🤖 AI 模型設定", "🐞 Bug 回報處理"])
     
     with admin_tab1:
         st.write("#### 使用者列表與權限設定")
@@ -706,6 +706,62 @@ elif st.session_state.active_tab == "admin":
             st.rerun()
 
     with admin_tab2:
+        st.write("#### 📜 全系統解題歷史紀錄（含時間戳記）")
+        all_logs = st.session_state.history_logs
+        
+        if not all_logs:
+            st.info("目前尚無任何解題紀錄。")
+        else:
+            filter_col1, filter_col2 = st.columns([1, 2])
+            user_list = ["全部使用者"] + list(st.session_state.users_db.keys())
+            selected_filter_user = filter_col1.selectbox("過濾使用者", user_list)
+            search_query = filter_col2.text_input("關鍵字搜尋", placeholder="搜尋題目內容、答案、備註...")
+            
+            filtered_logs = all_logs
+            if selected_filter_user != "全部使用者":
+                filtered_logs = [l for l in filtered_logs if l.get("user") == selected_filter_user]
+            if search_query:
+                filtered_logs = [l for l in filtered_logs if search_query.lower() in str(l).lower()]
+
+            st.caption(f"共顯示 {len(filtered_logs)} 筆紀錄")
+
+            # 轉化為資料表格檢視
+            table_data = []
+            for item in reversed(filtered_logs):
+                table_data.append({
+                    "時間": item.get("time", "未知"),
+                    "使用者": item.get("user", "未知"),
+                    "科目": item.get("subject", "未定"),
+                    "標準答案": item.get("ref_answer", "無"),
+                    "AI答案": item.get("ans", "無"),
+                    "補充說明": item.get("note", "無"),
+                    "圖片數": len(item.get("images_b64", [])),
+                })
+            
+            st.dataframe(pd.DataFrame(table_data), use_container_width=True)
+
+            st.divider()
+            st.write("##### 🔍 詳細解析卡片檢視")
+            for idx, log in enumerate(reversed(filtered_logs)):
+                with st.expander(f"🕒 [{log.get('time')}] {log.get('user')} - {log.get('subject')} (AI答案: {log.get('ans')})"):
+                    st.markdown(f"**時間：** `{log.get('time')}`")
+                    st.markdown(f"**使用者：** `{log.get('user')}`")
+                    st.markdown(f"**科目：** {log.get('subject')}")
+                    st.markdown(f"**標準答案：** {log.get('ref_answer')}")
+                    st.markdown(f"**補充說明：** {log.get('note')}")
+                    st.markdown(f"**AI解答：** {log.get('ans')}")
+                    st.markdown(f"**完整解析推導：**\n{log.get('reasoning')}")
+                    if log.get("images_b64"):
+                        st.write("📷 上傳圖片：")
+                        img_cols = st.columns(min(len(log["images_b64"]), 3))
+                        for i, img_b64 in enumerate(log["images_b64"]):
+                            try:
+                                img_bytes = base64.b64decode(img_b64)
+                                img_cols[i % 3].image(img_bytes, caption=f"圖 {i+1}", use_column_width=True)
+                            except Exception:
+                                pass
+
+    with admin_tab3:
         st.write("#### AI 模型管理與開關設定")
         
         col_ai1, col_ai2 = st.columns(2)
@@ -721,6 +777,6 @@ elif st.session_state.active_tab == "admin":
             save_config_from_session()
             st.success("AI 模型設定與服務開關儲存成功！")
 
-    with admin_tab3:
+    with admin_tab4:
         st.write("#### 使用者回報紀錄")
         st.write(st.session_state.bug_reports)
