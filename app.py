@@ -14,6 +14,7 @@ from openai import OpenAI
 import pandas as pd
 from PIL import Image
 import streamlit as st
+from streamlit_cropper import st_cropper
 import streamlit.components.v1 as components
 
 # 時區設定
@@ -112,7 +113,7 @@ def pil_to_base64(img: Image.Image) -> str:
 # =========================================================
 # 1. 頁面初始化與 Dark Glassmorphism 樣式
 # =========================================================
-st.set_page_config(page_title="盧浩化學 | 解題實驗室", page_icon="🧪", layout="centered")
+st.set_page_config(page_title="A.lab | 解題實驗室", page_icon="🧪", layout="centered")
 config = load_config()
 
 if "history_logs" not in st.session_state:
@@ -147,11 +148,9 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
 
-# 注入截圖黑夜 UI 樣式
 st.markdown(
     """
     <style>
-    /* 背景與基礎文字 */
     .stApp {
         background-color: #11151A !important;
         color: #E2E8F0 !important;
@@ -161,7 +160,6 @@ st.markdown(
     header[data-testid="stHeader"] { visibility: hidden; }
     footer { visibility: hidden; }
     
-    /* 深色卡片 */
     .custom-card {
         background: linear-gradient(145deg, #181E24, #13171C);
         border: 1px solid #28323D;
@@ -171,7 +169,6 @@ st.markdown(
         box-shadow: 0 4px 16px rgba(0,0,0,0.3);
     }
     
-    /* 頂部 Header 樣式 */
     .top-header {
         display: flex;
         justify-content: space-between;
@@ -183,7 +180,7 @@ st.markdown(
         margin-bottom: 14px;
     }
     .header-title {
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 700;
         color: #FFFFFF;
     }
@@ -192,7 +189,6 @@ st.markdown(
         color: #8A99AD;
     }
     
-    /* 使用者卡片 */
     .user-avatar {
         width: 42px;
         height: 42px;
@@ -213,7 +209,6 @@ st.markdown(
         text-align: right;
     }
     
-    /* 序號圖標 */
     .step-number {
         display: inline-block;
         width: 20px;
@@ -228,7 +223,6 @@ st.markdown(
         margin-right: 6px;
     }
 
-    /* 膠囊按鈕 */
     div.stButton > button {
         background: linear-gradient(180deg, #DCE6F2 0%, #B8C7D9 100%) !important;
         color: #0F172A !important;
@@ -244,34 +238,17 @@ st.markdown(
     }
     div.stButton > button p { color: #0F172A !important; }
 
-    /* 清除與次要按鈕 */
     .secondary-btn div.stButton > button {
         background: #1C242C !important;
         border: 1px solid #28323D !important;
     }
     .secondary-btn div.stButton > button p { color: #94A3B8 !important; }
 
-    /* 輸入框 */
     input, textarea, div[data-baseweb="input"] > div {
         background-color: #13171C !important;
         color: #F1F5F9 !important;
         border: 1px solid #28323D !important;
         border-radius: 10px !important;
-    }
-
-    /* 下方固定導覽列 */
-    .bottom-nav {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 60px;
-        background-color: #13171C;
-        border-top: 1px solid #28323D;
-        display: flex;
-        justify-content: space-around;
-        align-items: center;
-        z-index: 999;
     }
     </style>
     """,
@@ -279,7 +256,7 @@ st.markdown(
 )
 
 # =========================================================
-# 2. AI 核心邏輯 (OCR 與 解題引擎)
+# 2. AI 核心邏輯
 # =========================================================
 def build_system_prompt():
     return """你是一位專業嚴謹的萬能AI導師。
@@ -341,7 +318,7 @@ def call_ai_solver(question_text):
     return "解析失敗", "無法存取 AI 模型"
 
 # =========================================================
-# 3. 介面渲染 Header & User Info
+# 3. 介面 Header 與用戶資訊卡片 (已更新品牌名稱為 A.lab)
 # =========================================================
 st.markdown(
     """
@@ -349,7 +326,7 @@ st.markdown(
         <div style="display: flex; align-items: center; gap: 10px;">
             <span style="font-size: 22px;">🧪</span>
             <div>
-                <div class="header-title">盧浩化學 | 解題實驗室</div>
+                <div class="header-title">A.lab | 解題實驗室</div>
                 <div class="header-sub">Science Lab</div>
             </div>
         </div>
@@ -386,16 +363,19 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 頂部導覽列按鈕 (與設計圖導覽頁面一致)
-nav1, nav2, nav3 = st.columns(3)
+# 頂部選單切換（融合後台功能）
+nav1, nav2, nav3, nav4 = st.columns(4)
 if nav1.button("🏠 首頁", use_container_width=True):
     st.session_state.active_tab = "home"
     st.rerun()
 if nav2.button("✨ 最新解析", use_container_width=True):
     st.session_state.active_tab = "analysis"
     st.rerun()
-if nav3.button("📋 我的解題紀錄", use_container_width=True):
+if nav3.button("📋 解題紀錄", use_container_width=True):
     st.session_state.active_tab = "history"
+    st.rerun()
+if nav4.button("⚙️ 後台管理", use_container_width=True):
+    st.session_state.active_tab = "admin"
     st.rerun()
 
 st.divider()
@@ -404,21 +384,31 @@ st.divider()
 # 4. 頁面分流邏輯
 # =========================================================
 
-# --- TAB 1: 首頁 (上傳解題) ---
+# --- TAB 1: 首頁 (上傳解題 & 圖片裁切功能) ---
 if st.session_state.active_tab == "home":
     st.markdown(
         """
         <div style="font-size: 15px; font-weight: bold; color: #FFFFFF; margin-bottom: 8px;">
-            <span class="step-number">1</span> 上傳題目圖片
+            <span class="step-number">1</span> 上傳與裁切題目圖片
         </div>
         """,
         unsafe_allow_html=True,
     )
+    
     uploaded_files = st.file_uploader(
-        "可上傳 1~5 張，題目與解答皆可上傳",
+        "選擇題目圖片（可上傳 1~5 張）",
         type=["png", "jpg", "jpeg"],
         accept_multiple_files=True,
     )
+
+    cropped_images = []
+    if uploaded_files:
+        st.markdown("#### ✂️ 圖片裁切預覽（融合原網站裁切工具）")
+        for i, f in enumerate(uploaded_files):
+            img = Image.open(f)
+            st.write(f"圖片 {i+1}:")
+            cropped_img = st_cropper(img, realtime_update=True, box_color="#38BDF8", aspect_ratio=None, key=f"crop_{i}")
+            cropped_images.append(cropped_img)
 
     st.markdown(
         """
@@ -446,13 +436,13 @@ if st.session_state.active_tab == "home":
         elif not uploaded_files and not extra_note:
             st.warning("請上傳題目圖片或填寫補充敘述！")
         else:
-            with st.spinner("🌀 AI 正在分析與剖析題目中..."):
-                images = [Image.open(f) for f in uploaded_files] if uploaded_files else []
-                ocr_text = extract_text_from_images(images, extra_note)
+            with st.spinner("🌀 A.lab AI 正在分析與解題中..."):
+                images_to_process = cropped_images if cropped_images else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
+                ocr_text = extract_text_from_images(images_to_process, extra_note)
                 combined_question = f"補充敘述: {extra_note}\n\n圖片題目辨識內容:\n{ocr_text}" if ocr_text else extra_note
 
                 ans, reasoning = call_ai_solver(combined_question)
-                images_b64 = [pil_to_base64(img) for img in images]
+                images_b64 = [pil_to_base64(img) for img in images_to_process]
 
                 new_record = {
                     "user": user_name,
@@ -469,7 +459,7 @@ if st.session_state.active_tab == "home":
                 st.session_state.latest_analysis = new_record
                 user_info["used_today"] += 1
                 save_config_from_session()
-                st.toast("✅ 解題成功！", icon="🎉")
+                st.toast("✅ 解題完成！", icon="🎉")
                 st.session_state.active_tab = "analysis"
                 st.rerun()
 
@@ -481,8 +471,8 @@ elif st.session_state.active_tab == "analysis":
         st.markdown(
             f"""
             <div class="custom-card">
-                <div style="color: #38BDF8; font-weight: bold; margin-bottom: 6px;">[{res['subject']}] 參考答案與解析</div>
-                <div style="font-size: 13px; color: #94A3B8; margin-bottom: 6px;">標準參考答案: <b style="color:#FFFFFF;">{res['ref_answer']}</b> | AI 答覆: <b style="color:#38BDF8;">{res['ans']}</b></div>
+                <div style="color: #38BDF8; font-weight: bold; margin-bottom: 6px;">[{res['subject']}] 觀念拆解與解答</div>
+                <div style="font-size: 13px; color: #94A3B8; margin-bottom: 6px;">標準參考答案: <b style="color:#FFFFFF;">{res['ref_answer']}</b> | AI 答案: <b style="color:#38BDF8;">{res['ans']}</b></div>
                 <div style="font-size: 14px; line-height: 1.6; color: #F8FAFC; white-space: pre-line; margin-top: 10px;">
                 <b>觀念推導過程:</b>\n{res['reasoning']}
                 </div>
@@ -491,12 +481,12 @@ elif st.session_state.active_tab == "analysis":
             unsafe_allow_html=True,
         )
     else:
-        st.info("目前尚無最新的解題結果，請至「首頁」提交題目。")
+        st.info("目前尚無最新的解題結果，請至「首頁」上傳題目。")
 
-# --- TAB 3: 我 的解題紀錄 ---
+# --- TAB 3: 解題紀錄頁面 ---
 elif st.session_state.active_tab == "history":
-    st.markdown("### 我的解題紀錄")
-    search_kw = st.text_input("關鍵字搜尋", placeholder="搜尋答案、題目補充、解析內容...", label_visibility="collapsed")
+    st.markdown("### 📋 我的解題紀錄")
+    search_kw = st.text_input("搜尋關鍵字", placeholder="搜尋答案、題目補充、解析內容...", label_visibility="collapsed")
     
     logs = [l for l in st.session_state.history_logs if l.get("user") == user_name]
     if search_kw:
@@ -529,3 +519,38 @@ elif st.session_state.active_tab == "history":
                 """,
                 unsafe_allow_html=True,
             )
+
+# --- TAB 4: 後台管理 (融合原網站管理員功能) ---
+elif st.session_state.active_tab == "admin":
+    st.markdown("### ⚙️ A.lab 後台管理系統")
+    
+    admin_tab1, admin_tab2, admin_tab3 = st.tabs(["👥 使用者管理", "🤖 模型設定", "🐞 Bug 回報"])
+    
+    with admin_tab1:
+        st.write("#### 使用者列表與每日次數調整")
+        user_df = pd.DataFrame.from_dict(st.session_state.users_db, orient="index")
+        st.dataframe(user_df)
+        
+        selected_user = st.selectbox("選擇要修改額度的使用者", list(st.session_state.users_db.keys()))
+        new_limit = st.number_input("設定每日新額度", min_value=1, max_value=100, value=15)
+        if st.button("更新額度"):
+            st.session_state.users_db[selected_user]["custom_limit"] = new_limit
+            save_config_from_session()
+            st.success(f"已成功修改 {selected_user} 的每日額度為 {new_limit} 題！")
+
+    with admin_tab2:
+        st.write("#### AI 模型設定")
+        st.session_state.selected_gemini_model = st.text_input("Gemini 模型名稱", value=st.session_state.selected_gemini_model)
+        st.session_state.selected_openai_model = st.text_input("OpenAI 模型名稱", value=st.session_state.selected_openai_model)
+        if st.button("儲存模型設定"):
+            save_config_from_session()
+            st.success("模型設定已儲存！")
+
+    with admin_tab3:
+        st.write("#### Bug 回報區")
+        bug_input = st.text_area("回報遇到的問題或建議")
+        if st.button("提交 Bug 回報"):
+            if bug_input:
+                st.session_state.bug_reports.append({"user": user_name, "time": get_taipei_now_str(), "report": bug_input})
+                save_config_from_session()
+                st.success("已收到您的回報，謝謝！")
