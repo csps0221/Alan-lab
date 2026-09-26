@@ -1,6 +1,2 @@
-streamlit
-streamlit-cropper
 google-genai
 openai
-pandas
-pillow
