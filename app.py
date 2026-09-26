@@ -38,6 +38,7 @@ DEFAULT_CONFIG = {
     "selected_openai_model": "gpt-4o-mini",
     "enable_gemini": True,
     "enable_openai": True,
+    "theme_color": "dark_blue",
     "subjects": ["化學", "理化", "生物", "地科", "數學", "其他"],
     "bug_reports": [],
     "history_logs": [],
@@ -108,6 +109,7 @@ def save_config_from_session():
         "selected_openai_model": st.session_state.selected_openai_model,
         "enable_gemini": st.session_state.enable_gemini,
         "enable_openai": st.session_state.enable_openai,
+        "theme_color": st.session_state.theme_color,
         "subjects": st.session_state.subjects,
         "bug_reports": st.session_state.bug_reports,
         "history_logs": st.session_state.history_logs,
@@ -122,7 +124,7 @@ def pil_to_base64(img: Image.Image) -> str:
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 # =========================================================
-# 1. 頁面初始化與 Dark Glassmorphism 樣式
+# 1. 頁面初始化與動態介面主題樣式
 # =========================================================
 st.set_page_config(page_title="A.lab | 解題實驗室", page_icon="🧪", layout="centered")
 config = load_config()
@@ -151,52 +153,81 @@ if "enable_gemini" not in st.session_state:
     st.session_state.enable_gemini = config.get("enable_gemini", True)
 if "enable_openai" not in st.session_state:
     st.session_state.enable_openai = config.get("enable_openai", True)
+if "theme_color" not in st.session_state:
+    st.session_state.theme_color = config.get("theme_color", "dark_blue")
 
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
 
+# 多款介面主題配色定義
+THEME_PALETTES = {
+    "dark_blue": {
+        "bg": "#11151A",
+        "card_bg": "linear-gradient(145deg, #181E24, #13171C)",
+        "card_border": "#28323D",
+        "primary_btn": "linear-gradient(180deg, #DCE6F2 0%, #B8C7D9 100%)",
+        "highlight": "#38BDF8",
+    },
+    "emerald": {
+        "bg": "#0B1914",
+        "card_bg": "linear-gradient(145deg, #132720, #0E1F19)",
+        "card_border": "#1F3E33",
+        "primary_btn": "linear-gradient(180deg, #D1FAE5 0%, #A7F3D0 100%)",
+        "highlight": "#34D399",
+    },
+    "purple": {
+        "bg": "#14111A",
+        "card_bg": "linear-gradient(145deg, #201A28, #181320)",
+        "card_border": "#352B42",
+        "primary_btn": "linear-gradient(180deg, #EDE9FE 0%, #DDD6FE 100%)",
+        "highlight": "#C084FC",
+    },
+}
+
+current_theme = THEME_PALETTES.get(st.session_state.theme_color, THEME_PALETTES["dark_blue"])
+
 st.markdown(
-    """
+    f"""
     <style>
-    .stApp {
-        background-color: #11151A !important;
+    .stApp {{
+        background-color: {current_theme["bg"]} !important;
         color: #E2E8F0 !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
+    }}
     
-    header[data-testid="stHeader"] { visibility: hidden; }
-    footer { visibility: hidden; }
+    header[data-testid="stHeader"] {{ visibility: hidden; }}
+    footer {{ visibility: hidden; }}
     
-    .custom-card {
-        background: linear-gradient(145deg, #181E24, #13171C);
-        border: 1px solid #28323D;
+    .custom-card {{
+        background: {current_theme["card_bg"]};
+        border: 1px solid {current_theme["card_border"]};
         border-radius: 16px;
         padding: 16px;
         margin-bottom: 12px;
         box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-    }
+    }}
     
-    .top-header {
+    .top-header {{
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: #181E24;
-        border: 1px solid #28323D;
+        background: {current_theme["card_bg"]};
+        border: 1px solid {current_theme["card_border"]};
         border-radius: 16px;
         padding: 12px 16px;
         margin-bottom: 14px;
-    }
-    .header-title {
+    }}
+    .header-title {{
         font-size: 16px;
         font-weight: 700;
         color: #FFFFFF;
-    }
-    .header-sub {
+    }}
+    .header-sub {{
         font-size: 11px;
         color: #8A99AD;
-    }
+    }}
     
-    .user-avatar {
+    .user-avatar {{
         width: 42px;
         height: 42px;
         background-color: #2D3748;
@@ -207,16 +238,16 @@ st.markdown(
         font-size: 16px;
         font-weight: bold;
         color: #E2E8F0;
-    }
-    .quota-badge {
+    }}
+    .quota-badge {{
         background-color: #1A232E;
         border: 1px solid #2D3748;
         border-radius: 12px;
         padding: 6px 12px;
         text-align: right;
-    }
+    }}
     
-    .step-number {
+    .step-number {{
         display: inline-block;
         width: 20px;
         height: 20px;
@@ -228,35 +259,35 @@ st.markdown(
         font-size: 11px;
         font-weight: bold;
         margin-right: 6px;
-    }
+    }}
 
-    div.stButton > button {
-        background: linear-gradient(180deg, #DCE6F2 0%, #B8C7D9 100%) !important;
+    div.stButton > button {{
+        background: {current_theme["primary_btn"]} !important;
         color: #0F172A !important;
         border: none !important;
         font-weight: 700 !important;
         border-radius: 10px !important;
         padding: 8px 14px !important;
         transition: all 0.2s ease-in-out !important;
-    }
-    div.stButton > button:hover {
+    }}
+    div.stButton > button:hover {{
         background: #FFFFFF !important;
         box-shadow: 0 0 10px rgba(255, 255, 255, 0.25) !important;
-    }
-    div.stButton > button p { color: #0F172A !important; }
+    }}
+    div.stButton > button p {{ color: #0F172A !important; }}
 
-    .secondary-btn div.stButton > button {
+    .secondary-btn div.stButton > button {{
         background: #1C242C !important;
-        border: 1px solid #28323D !important;
-    }
-    .secondary-btn div.stButton > button p { color: #94A3B8 !important; }
+        border: 1px solid {current_theme["card_border"]} !important;
+    }}
+    .secondary-btn div.stButton > button p {{ color: #94A3B8 !important; }}
 
-    input, textarea, div[data-baseweb="input"] > div {
+    input, textarea, div[data-baseweb="input"] > div {{
         background-color: #13171C !important;
         color: #F1F5F9 !important;
-        border: 1px solid #28323D !important;
+        border: 1px solid {current_theme["card_border"]} !important;
         border-radius: 10px !important;
-    }
+    }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -368,21 +399,36 @@ def call_ai_solver(question_text):
 # =========================================================
 # 4. 主介面 Header 與用戶資訊卡片
 # =========================================================
-st.markdown(
-    """
-    <div class="top-header">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 22px;">🧪</span>
-            <div>
-                <div class="header-title">A.lab | 解題實驗室</div>
-                <div class="header-sub">Science Lab</div>
+col_h1, col_h2 = st.columns([4, 1])
+with col_h1:
+    st.markdown(
+        """
+        <div class="top-header" style="margin-bottom: 0px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 22px;">🧪</span>
+                <div>
+                    <div class="header-title">A.lab | 解題實驗室</div>
+                    <div class="header-sub">Science Lab</div>
+                </div>
             </div>
         </div>
-        <div style="font-size: 16px; color: #8A99AD;">🎨 ☰</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+        """,
+        unsafe_allow_html=True,
+    )
+with col_h2:
+    theme_choice = st.selectbox(
+        "主題色彩",
+        options=["dark_blue", "emerald", "purple"],
+        format_func=lambda x: {"dark_blue": "🌌 藍", "emerald": "🌲 綠", "purple": "🔮 紫"}[x],
+        index=["dark_blue", "emerald", "purple"].index(st.session_state.theme_color),
+        label_visibility="collapsed",
+    )
+    if theme_choice != st.session_state.theme_color:
+        st.session_state.theme_color = theme_choice
+        save_config_from_session()
+        st.rerun()
+
+st.write("")
 
 user_name = st.session_state.user_name
 user_info = st.session_state.users_db.get(user_name, {"class_name": "學生", "used_today": 0, "custom_limit": 15})
@@ -420,7 +466,7 @@ with col_head2:
 
 st.write("")
 
-# 導覽分頁按鈕
+# 導覽分頁按鈕（僅對管理者顯示後台按鈕）
 is_admin = st.session_state.get("user_role") == "admin"
 cols = st.columns(4 if is_admin else 3)
 
@@ -530,8 +576,8 @@ elif st.session_state.active_tab == "analysis":
         st.markdown(
             f"""
             <div class="custom-card">
-                <div style="color: #38BDF8; font-weight: bold; margin-bottom: 6px;">[{res['subject']}] 觀念拆解與解答</div>
-                <div style="font-size: 13px; color: #94A3B8; margin-bottom: 6px;">標準參考答案: <b style="color:#FFFFFF;">{res['ref_answer']}</b> | AI 答案: <b style="color:#38BDF8;">{res['ans']}</b></div>
+                <div style="color: {current_theme['highlight']}; font-weight: bold; margin-bottom: 6px;">[{res['subject']}] 觀念拆解與解答</div>
+                <div style="font-size: 13px; color: #94A3B8; margin-bottom: 6px;">標準參考答案: <b style="color:#FFFFFF;">{res['ref_answer']}</b> | AI 答案: <b style="color:{current_theme['highlight']};">{res['ans']}</b></div>
                 <div style="font-size: 14px; line-height: 1.6; color: #F8FAFC; white-space: pre-line; margin-top: 10px;">
                 <b>觀念推導過程:</b>\n{res['reasoning']}
                 </div>
@@ -579,8 +625,15 @@ elif st.session_state.active_tab == "history":
                 unsafe_allow_html=True,
             )
 
-# --- TAB 4: 後台管理員系統 ---
-elif st.session_state.active_tab == "admin" and is_admin:
+# --- TAB 4: 後台管理員系統 (非 admin 禁止進入) ---
+elif st.session_state.active_tab == "admin":
+    if not is_admin:
+        st.error("⛔ 存取被拒絕：您沒有進入後台管理系統的權限！")
+        if st.button("返回首頁"):
+            st.session_state.active_tab = "home"
+            st.rerun()
+        st.stop()
+
     st.markdown("### ⚙️ A.lab 後台管理系統")
     admin_tab1, admin_tab2, admin_tab3 = st.tabs(["👥 使用者列表與權限設定", "🤖 AI 模型設定", "🐞 Bug 回報處理"])
     
@@ -588,7 +641,6 @@ elif st.session_state.active_tab == "admin" and is_admin:
         st.write("#### 使用者列表與權限設定")
         user_df = pd.DataFrame.from_dict(st.session_state.users_db, orient="index")
         
-        # 轉譯為中文欄位名稱
         column_translation = {
             "password": "密碼",
             "class_name": "班別/類別",
@@ -600,16 +652,58 @@ elif st.session_state.active_tab == "admin" and is_admin:
         }
         translated_df = user_df.rename(columns=column_translation)
         translated_df.index.name = "帳號"
-        
-        st.dataframe(translated_df)
+        st.dataframe(translated_df, use_container_width=True)
         
         st.divider()
+        st.write("#### ⚡ 快速一鍵修改使用者題數額度")
+        
+        # 1. 全體一鍵修改
+        st.markdown("**1. 全體使用者一鍵重設**")
+        col_all1, col_all2 = st.columns([3, 1])
+        all_limit_val = col_all1.number_input("設定所有一般使用者題數", min_value=1, max_value=99999, value=15, key="all_limit_input")
+        if col_all2.button("一鍵套用全體", use_container_width=True):
+            for u_name, u_data in st.session_state.users_db.items():
+                if u_data.get("role") != "admin":
+                    u_data["custom_limit"] = all_limit_val
+            save_config_from_session()
+            st.success(f"已成功將所有非管理員使用者的每日額度統一修改為 {all_limit_val} 題！")
+            st.rerun()
+
+        # 2. 單一使用者點擊修改
+        st.markdown("**2. 單一使用者快速點擊修改**")
         selected_user = st.selectbox("選擇要修改的使用者", list(st.session_state.users_db.keys()))
-        new_limit = st.number_input("設定每日解題額度", min_value=1, max_value=99999, value=int(st.session_state.users_db[selected_user].get("custom_limit", 15)))
-        if st.button("更新使用者額度"):
+        current_u_limit = int(st.session_state.users_db[selected_user].get("custom_limit", 15))
+        st.caption(f"目前額度：{current_u_limit} 題")
+        
+        btn_cols = st.columns(4)
+        if btn_cols[0].button("一鍵設為 15 題", use_container_width=True):
+            st.session_state.users_db[selected_user]["custom_limit"] = 15
+            save_config_from_session()
+            st.toast(f"已修改 {selected_user} 額度為 15 題！", icon="✅")
+            st.rerun()
+        if btn_cols[1].button("一鍵設為 30 題", use_container_width=True):
+            st.session_state.users_db[selected_user]["custom_limit"] = 30
+            save_config_from_session()
+            st.toast(f"已修改 {selected_user} 額度為 30 題！", icon="✅")
+            st.rerun()
+        if btn_cols[2].button("一鍵設為 50 題", use_container_width=True):
+            st.session_state.users_db[selected_user]["custom_limit"] = 50
+            save_config_from_session()
+            st.toast(f"已修改 {selected_user} 額度為 50 題！", icon="✅")
+            st.rerun()
+        if btn_cols[3].button("一鍵設為 無限(99999)", use_container_width=True):
+            st.session_state.users_db[selected_user]["custom_limit"] = 99999
+            save_config_from_session()
+            st.toast(f"已修改 {selected_user} 額度為無限！", icon="✅")
+            st.rerun()
+
+        st.write("或手動輸入題數：")
+        new_limit = st.number_input("自訂題數", min_value=1, max_value=99999, value=current_u_limit, key="custom_limit_input")
+        if st.button("儲存自訂題數"):
             st.session_state.users_db[selected_user]["custom_limit"] = new_limit
             save_config_from_session()
             st.success(f"已成功修改 {selected_user} 的每日額度為 {new_limit} 題！")
+            st.rerun()
 
     with admin_tab2:
         st.write("#### AI 模型管理與開關設定")
