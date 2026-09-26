@@ -282,7 +282,7 @@ if not st.session_state.logged_in:
     with st.container():
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("### 🔑 使用者登入")
-        input_username = st.text_input("帳號", placeholder="請輸入帳號 (例如: Alan2580 或 蕭翊倫)")
+        input_username = st.text_input("帳號", placeholder="請輸入帳號")
         input_password = st.text_input("密碼", type="password", placeholder="請輸入密碼")
         
         if st.button("登入系統", use_container_width=True):
@@ -539,7 +539,7 @@ elif st.session_state.active_tab == "analysis":
     else:
         st.info("目前尚無最新的解題結果，請至「首頁」上傳題目。")
 
-# --- TAB 3: 我 的解題紀錄 ---
+# --- TAB 3: 我的解題紀錄 ---
 elif st.session_state.active_tab == "history":
     st.markdown("### 📋 我的解題紀錄")
     search_kw = st.text_input("搜尋關鍵字", placeholder="搜尋答案、題目補充、解析內容...", label_visibility="collapsed")
