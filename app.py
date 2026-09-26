@@ -34,7 +34,7 @@ FILE_LOCK = threading.Lock()
 
 DEFAULT_CONFIG = {
     "daily_limit": 15,
-    "selected_gemini_model": "gemini-3.6-flash",
+    "selected_gemini_model": "gemini-3.1-pro",  # 預設改為 Gemini 3.1 Pro
     "selected_openai_model": "gpt-4o-mini",
     "enable_gemini": True,
     "enable_openai": True,
@@ -153,7 +153,7 @@ if "logged_in" not in st.session_state:
 if "must_change_pwd" not in st.session_state:
     st.session_state.must_change_pwd = False
 if "selected_gemini_model" not in st.session_state:
-    st.session_state.selected_gemini_model = config.get("selected_gemini_model", "gemini-3.6-flash")
+    st.session_state.selected_gemini_model = config.get("selected_gemini_model", "gemini-3.1-pro")
 if "selected_openai_model" not in st.session_state:
     st.session_state.selected_openai_model = config.get("selected_openai_model", "gpt-4o-mini")
 if "enable_gemini" not in st.session_state:
@@ -404,7 +404,7 @@ if not st.session_state.logged_in:
             st.stop()
 
 # ====================
-# 3. AI 核心邏輯 (加入科目專業提示)
+# 3. AI 核心邏輯
 # ====================
 def build_system_prompt(subject: str = "通用"):
     return f"""你是一位專業嚴謹的【{subject}】領域萬能 AI 導師。
@@ -873,13 +873,12 @@ elif st.session_state.active_tab == "admin":
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. 📚 科目管理 (全新功能)
+    # 2. 📚 科目管理
     with admin_tab2:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### 📚 系統科目類別管理")
         st.write("在此處新增或移除解題科目選單，修改後學生前端會同步更新，AI 也會根據所選科目採用對應專業解題模式。")
         
-        # 顯示當前科目列表
         st.markdown("**目前系統已啟用的科目列表：**")
         subject_tags = " ".join([f"`{s}`" for s in st.session_state.subjects])
         st.markdown(f"> {subject_tags}")
@@ -1006,19 +1005,39 @@ elif st.session_state.active_tab == "admin":
                     st.toast("點評已儲存並成功更新統計！", icon="✅")
                     st.rerun()
 
-    # 4. AI 模型設定
+    # 4. AI 模型設定 (以下拉選單方式支援 Gemini 3.1 Pro 與 3.6 Flash)
     with admin_tab4:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### AI 模型引擎開關與模型切換")
         col_ai1, col_ai2 = st.columns(2)
+        
+        gemini_options = ["gemini-3.1-pro", "gemini-3.6-flash", "gemini-2.5-pro", "gemini-2.5-flash"]
+        current_gemini = st.session_state.selected_gemini_model
+        gemini_idx = gemini_options.index(current_gemini) if current_gemini in gemini_options else 0
+
         with col_ai1:
             st.markdown("##### Google Gemini")
             st.session_state.enable_gemini = st.toggle("啟用 Gemini AI 解題引擎", value=st.session_state.enable_gemini)
-            st.session_state.selected_gemini_model = st.text_input("Gemini 模型識別碼", value=st.session_state.selected_gemini_model)
+            st.session_state.selected_gemini_model = st.selectbox(
+                "Gemini 模型選擇",
+                options=gemini_options,
+                index=gemini_idx,
+                help="Gemini 3.1 Pro 擁有極佳的複雜邏輯推導與 Agent 解題能力"
+            )
+            
+        openai_options = ["gpt-4o-mini", "gpt-4o", "o3-mini"]
+        current_openai = st.session_state.selected_openai_model
+        openai_idx = openai_options.index(current_openai) if current_openai in openai_options else 0
+
         with col_ai2:
             st.markdown("##### OpenAI GPT")
             st.session_state.enable_openai = st.toggle("啟用 OpenAI 解題引擎", value=st.session_state.enable_openai)
-            st.session_state.selected_openai_model = st.text_input("OpenAI 模型識別碼", value=st.session_state.selected_openai_model)
+            st.session_state.selected_openai_model = st.selectbox(
+                "OpenAI 模型選擇",
+                options=openai_options,
+                index=openai_idx
+            )
+            
         st.write("")
         if st.button("儲存 AI 模型設定", use_container_width=True):
             save_config_from_session()
