@@ -314,7 +314,7 @@ def build_system_prompt():
 遇到公式請使用標準 LaTeX 語法(如 $E=mc^2$)。請以繁體中文回答。"""
 
 def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
-    if not GEMINI_API_KEY or not image_list:
+    if not GEMINI_API_KEY or not image_list or not st.session_state.enable_gemini:
         return ""
     ocr_prompt = f"請詳細轉錄圖片中的所有題目文字、選項與公式。補充說明: {extra_info}"
     client = genai.Client(api_key=GEMINI_API_KEY)
@@ -327,6 +327,9 @@ def extract_text_from_images(image_list: list, extra_info: str = "") -> str:
         return f"[圖片辨識說明]: {str(e)}"
 
 def call_ai_solver(question_text):
+    if not st.session_state.enable_gemini and not st.session_state.enable_openai:
+        return "服務已關閉", "管理員目前已關閉所有 AI 解題服務系統。"
+
     if not GEMINI_API_KEY and not OPENAI_API_KEY:
         return "未設定 API Key", "請在 secrets.toml 中設定 API Key。"
     
@@ -360,7 +363,7 @@ def call_ai_solver(question_text):
         except Exception as e:
             return "解析失敗", str(e)
             
-    return "解析失敗", "無法存取 AI 模型"
+    return "解析失敗", "無法存取 AI 模型或相關服務未啟用"
 
 # =========================================================
 # 4. 主介面 Header 與用戶資訊卡片
@@ -579,27 +582,50 @@ elif st.session_state.active_tab == "history":
 # --- TAB 4: 後台管理員系統 ---
 elif st.session_state.active_tab == "admin" and is_admin:
     st.markdown("### ⚙️ A.lab 後台管理系統")
-    admin_tab1, admin_tab2, admin_tab3 = st.tabs(["👥 使用者管理", "🤖 AI 模型設定", "🐞 Bug 回報處理"])
+    admin_tab1, admin_tab2, admin_tab3 = st.tabs(["👥 使用者列表與權限設定", "🤖 AI 模型設定", "🐞 Bug 回報處理"])
     
     with admin_tab1:
         st.write("#### 使用者列表與權限設定")
         user_df = pd.DataFrame.from_dict(st.session_state.users_db, orient="index")
-        st.dataframe(user_df)
         
-        selected_user = st.selectbox("選擇使用者", list(st.session_state.users_db.keys()))
-        new_limit = st.number_input("設定每日新解題額度", min_value=1, max_value=99999, value=15)
+        # 轉譯為中文欄位名稱
+        column_translation = {
+            "password": "密碼",
+            "class_name": "班別/類別",
+            "role": "權限角色",
+            "first_login": "首次登入",
+            "used_today": "今日已用",
+            "total_used": "累積使用",
+            "custom_limit": "每日額度",
+        }
+        translated_df = user_df.rename(columns=column_translation)
+        translated_df.index.name = "帳號"
+        
+        st.dataframe(translated_df)
+        
+        st.divider()
+        selected_user = st.selectbox("選擇要修改的使用者", list(st.session_state.users_db.keys()))
+        new_limit = st.number_input("設定每日解題額度", min_value=1, max_value=99999, value=int(st.session_state.users_db[selected_user].get("custom_limit", 15)))
         if st.button("更新使用者額度"):
             st.session_state.users_db[selected_user]["custom_limit"] = new_limit
             save_config_from_session()
             st.success(f"已成功修改 {selected_user} 的每日額度為 {new_limit} 題！")
 
     with admin_tab2:
-        st.write("#### AI 模型管理")
-        st.session_state.selected_gemini_model = st.text_input("Gemini 模型名稱", value=st.session_state.selected_gemini_model)
-        st.session_state.selected_openai_model = st.text_input("OpenAI 模型名稱", value=st.session_state.selected_openai_model)
-        if st.button("儲存模型變更"):
+        st.write("#### AI 模型管理與開關設定")
+        
+        col_ai1, col_ai2 = st.columns(2)
+        with col_ai1:
+            st.session_state.enable_gemini = st.toggle("啟用 Gemini AI 引擎", value=st.session_state.enable_gemini)
+            st.session_state.selected_gemini_model = st.text_input("Gemini 模型名稱", value=st.session_state.selected_gemini_model)
+        
+        with col_ai2:
+            st.session_state.enable_openai = st.toggle("啟用 OpenAI AI 引擎", value=st.session_state.enable_openai)
+            st.session_state.selected_openai_model = st.text_input("OpenAI 模型名稱", value=st.session_state.selected_openai_model)
+
+        if st.button("儲存 AI 設定"):
             save_config_from_session()
-            st.success("模型設定儲存成功！")
+            st.success("AI 模型設定與服務開關儲存成功！")
 
     with admin_tab3:
         st.write("#### 使用者回報紀錄")
