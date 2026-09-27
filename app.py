@@ -8,6 +8,7 @@ import random
 import threading
 import time
 from zoneinfo import ZoneInfo
+
 from google import genai
 from google.genai.errors import APIError
 from openai import OpenAI
@@ -53,7 +54,7 @@ DEFAULT_CONFIG = {
             "total_used": 0,
             "custom_limit": 99999,
         },
-    },
+    }
 }
 
 def load_config():
@@ -148,9 +149,8 @@ if "theme_color" not in st.session_state:
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
 
-# 更新為指定的 5 種主題顏色
 THEME_PALETTES = {
-    "quiet_blue": { # 靜謐深藍
+    "quiet_blue": {
         "bg": "#0B132B",
         "card_bg": "linear-gradient(135deg, #1C2541 0%, #0B132B 100%)",
         "card_border": "#3A506B",
@@ -159,7 +159,7 @@ THEME_PALETTES = {
         "highlight": "#6FFFE9",
         "badge_bg": "#1C2541",
     },
-    "forest_light": { # 森語晨光
+    "forest_light": {
         "bg": "#1B261C",
         "card_bg": "linear-gradient(135deg, #2D3A2E 0%, #1B261C 100%)",
         "card_border": "#4E6B50",
@@ -168,7 +168,7 @@ THEME_PALETTES = {
         "highlight": "#BEF264",
         "badge_bg": "#2D3A2E",
     },
-    "aurora_blue": { # 極光藍境
+    "aurora_blue": {
         "bg": "#0F172A",
         "card_bg": "linear-gradient(135deg, #1E293B 0%, #0F172A 100%)",
         "card_border": "#334155",
@@ -177,7 +177,7 @@ THEME_PALETTES = {
         "highlight": "#38BDF8",
         "badge_bg": "#1E293B",
     },
-    "dark_gold": { # 墨夜流金
+    "dark_gold": {
         "bg": "#18181B",
         "card_bg": "linear-gradient(135deg, #27272A 0%, #18181B 100%)",
         "card_border": "#52525B",
@@ -186,7 +186,7 @@ THEME_PALETTES = {
         "highlight": "#FDE047",
         "badge_bg": "#27272A",
     },
-    "graphite_gray": { # 玄霧石墨
+    "graphite_gray": {
         "bg": "#212529",
         "card_bg": "linear-gradient(135deg, #343A40 0%, #212529 100%)",
         "card_border": "#495057",
@@ -194,7 +194,7 @@ THEME_PALETTES = {
         "btn_text": "#212529",
         "highlight": "#E9ECEF",
         "badge_bg": "#343A40",
-    },
+    }
 }
 
 current_theme = THEME_PALETTES.get(st.session_state.theme_color, THEME_PALETTES["graphite_gray"])
@@ -347,7 +347,6 @@ if not st.session_state.logged_in:
         """,
         unsafe_allow_html=True,
     )
-
     if st.session_state.must_change_pwd:
         with st.container():
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
@@ -355,7 +354,6 @@ if not st.session_state.logged_in:
             st.info("為了您的帳號安全，第一次登入請設定新密碼！")
             new_pwd = st.text_input("輸入新密碼", type="password", placeholder="請輸入新密碼")
             confirm_pwd = st.text_input("確認新密碼", type="password", placeholder="請再次輸入新密碼")
-
             if st.button("確認修改並登入", use_container_width=True):
                 if not new_pwd:
                     st.error("新密碼不可為空白！")
@@ -381,7 +379,6 @@ if not st.session_state.logged_in:
             st.markdown("### 使用者登入")
             input_username = st.text_input("帳號", placeholder="請輸入帳號")
             input_password = st.text_input("密碼", type="password", placeholder="請輸入密碼")
-
             if st.button("登入系統", use_container_width=True):
                 users = st.session_state.users_db
                 if input_username in users and users[input_username]["password"] == input_password:
@@ -412,24 +409,21 @@ def build_system_prompt(subject: str = "通用", depth_mode: str = "標準詳解
         "深度解析": "請提供極其詳細的引申觀念、原理探討、易錯陷阱提醒以及多維度的邏輯剖析。"
     }
     selected_depth_desc = depth_instructions.get(depth_mode, depth_instructions["標準詳解"])
-
-    return f"""你是一位專業嚴謹的【{subject}】領域萬能 AI 導師。
-本次解題要求深度為：【{depth_mode}】（{selected_depth_desc}）。
-
+    return f"""你是一位專業嚴謹的【{subject}】領域萬能AI導師。
+本次解題要求深度為:【{depth_mode}】({selected_depth_desc})。
 請針對使用者提出的問題進行【{subject}】領域精準解答。
 請嚴格回傳JSON格式(不要包裹在 markdown codeblock 中):
 {{
-    "ans": "正確答案選項或簡短最終結果",
-    "reasoning": "步驟清晰、邏輯嚴謹的詳細觀念推導過程",
-    "options_analysis": [
-        {{"option": "(A)", "is_correct": true, "text": "(A) 敘述內容", "explanation": "針對選項A的具體對錯分析與說明"}},
-        {{"option": "(B)", "is_correct": false, "text": "(B) 敘述內容", "explanation": "針對選項B的具體對錯分析與說明"}}
-    ]
+  "ans": "正確答案選項或簡短最終結果",
+  "reasoning": "步驟清晰、邏輯嚴謹的詳細觀念推導過程",
+  "options_analysis": [
+    {{"option": "(A)", "is_correct": true, "text": "(A) 敘述內容", "explanation": "針對選項A的具體對錯分析與說明"}},
+    {{"option": "(B)", "is_correct": false, "text": "(B) 敘述內容", "explanation": "針對選項B的具體對錯分析與說明"}}
+  ]
 }}
-
-說明：
-1. 若題目包含選擇題選項（如 A, B, C, D, E 等），請務必填充 `options_analysis` 陣列，逐一評估每個選項的正確與否 (`is_correct`: true/false) 並給出簡要解析。若非選擇題或無具體選項，`options_analysis` 可為空陣列 `[]`。
-2. 遇到公式請使用標準 LaTeX 語法(如 $E=mc^{{2}}$) 。請以繁體中文回答。"""
+說明:
+1. 若題目包含選擇題選項(如A, B, C, D, E等)，請務必填充 `options_analysis` 陣列，逐一評估每個選項的正確與否 (`is_correct`: true/false) 並給出簡要解析。若非選擇題或無具體選項，`options_analysis` 可為空陣列 `[]`。
+2. 遇到公式請使用標準 LaTeX語法(如 $E=mc^{{2}}$)。請以繁體中文回答。"""
 
 def extract_text_from_images(image_list: list, extra_info: str = "", subject: str = "通用") -> str:
     if not GEMINI_API_KEY or not image_list or not st.session_state.enable_gemini:
@@ -499,7 +493,7 @@ with col_h1:
             <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 24px;">🧪</span>
                 <div>
-                    <div class="header-title">A.lab | 解題實驗室 2.0.5</div>
+                    <div class="header-title">A.lab | 解題實驗室2.0.5</div>
                     <div class="header-sub">Science Lab Platform</div>
                 </div>
             </div>
@@ -508,13 +502,9 @@ with col_h1:
         unsafe_allow_html=True,
     )
 with col_h2:
-    # 外觀主題色彩選擇選單（具備防禦機制）
     theme_options = ["quiet_blue", "forest_light", "aurora_blue", "dark_gold", "graphite_gray"]
     current_theme_key = st.session_state.get("theme_color", "graphite_gray")
-    
-    # 安全取得 index，若舊的選單不在列表中則 fallback 回預設值 4 (graphite_gray)
     theme_index = theme_options.index(current_theme_key) if current_theme_key in theme_options else 4
-
     theme_choice = st.selectbox(
         "外觀主題",
         options=theme_options,
@@ -631,7 +621,6 @@ if st.session_state.active_tab == "home":
         """,
         unsafe_allow_html=True,
     )
-    
     depth_mode = st.radio(
         "解說深度",
         options=["精簡解答", "標準詳解", "深度解析"],
@@ -639,7 +628,6 @@ if st.session_state.active_tab == "home":
         horizontal=True,
         help="【精簡解答】掌握核心觀念與簡潔步驟\n【標準詳解】完整步驟與觀念推導\n【深度解析】包含引申觀念與易錯點剖析",
     )
-
     selected_subject = st.selectbox("選擇題目科目", st.session_state.subjects, index=0)
     ref_answer = st.text_input("標準參考答案(選填)", placeholder="例如B、ACD、2.5 mol...")
 
@@ -652,9 +640,9 @@ if st.session_state.active_tab == "home":
 
     if submit_btn:
         if isinstance(remains, int) and remains <= 0:
-            st.error("今日解題額度已用完,請明日再試!")
+            st.error("今日解題額度已用完，請明日再試！")
         elif not uploaded_files and not text_question.strip():
-            st.warning("請輸入文字題目或上傳題目圖片!")
+            st.warning("請輸入文字題目或上傳題目圖片！")
         else:
             with st.spinner(f"A.lab AI 正在以【{depth_mode}】模式針對【{selected_subject}】進行分析中..."):
                 images_to_process = (
@@ -663,13 +651,10 @@ if st.session_state.active_tab == "home":
                     else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
                 )
                 ocr_text = (
-                    extract_text_from_images(
-                        images_to_process, text_question, subject=selected_subject
-                    )
+                    extract_text_from_images(images_to_process, text_question, subject=selected_subject)
                     if images_to_process
                     else ""
                 )
-
                 combined_question = ""
                 if text_question.strip():
                     combined_question += f"使用者文字題目/補充:\n{text_question.strip()}\n\n"
@@ -680,7 +665,6 @@ if st.session_state.active_tab == "home":
                     combined_question, subject=selected_subject, depth_mode=depth_mode
                 )
                 images_b64 = [compress_and_to_b64(img) for img in images_to_process]
-
                 new_record = {
                     "id": str(time.time()),
                     "user": user_name,
@@ -702,9 +686,7 @@ if st.session_state.active_tab == "home":
                 st.session_state.latest_analysis = new_record
                 user_info["used_today"] += 1
                 save_config_from_session()
-                st.toast("解題完成!", icon="🎉")
-                
-                # 自動跳轉至「解題解析」頁面
+                st.toast("解題完成！", icon="🎉")
                 st.session_state.active_tab = "analysis"
                 st.rerun()
 
@@ -712,7 +694,6 @@ if st.session_state.active_tab == "home":
 elif st.session_state.active_tab == "analysis":
     st.markdown("### 解題解析")
     st.caption("答案 → 觀念詳解 → 選項解析 → 追問")
-
     if "latest_analysis" in st.session_state and st.session_state.latest_analysis:
         res = st.session_state.latest_analysis
         feedback = res.get("admin_feedback", {})
@@ -730,10 +711,14 @@ elif st.session_state.active_tab == "analysis":
             f"""
             <div class="custom-card">
                 <div style="display: flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
-                    <div style="color: {current_theme['highlight']}; font-weight: bold; font-size: 16px;">[{res['subject']}] 觀念拆解與解答 <span style="font-size:12px; opacity:0.8;">({depth})</span></div>
+                    <div style="color: {current_theme['highlight']}; font-weight: bold; font-size: 16px;">
+                        [{res['subject']}] 觀念拆解與解答 <span style="font-size:12px; opacity:0.8;">({depth})</span>
+                    </div>
                     <div>{status_badge}</div>
                 </div>
-                <div style="font-size: 13px; color: #94A3B8; margin-bottom: 6px;">標準參考答案: <b style="color:#FFFFFF;">{res['ref_answer']}</b> | AI 答案: <b style="color:{current_theme['highlight']};">{res['ans']}</b></div>
+                <div style="font-size: 13px; color: #94A3B8; margin-bottom: 6px;">
+                    標準參考答案: <b style="color:#FFFFFF;">{res['ref_answer']}</b> | AI 答案: <b style="color:{current_theme['highlight']};">{res['ans']}</b>
+                </div>
                 <div style="font-size: 14px; line-height: 1.6; color: #F8FAFC; white-space: pre-line; margin-top: 10px;">
                     <b>觀念推導過程:</b>\n{res['reasoning']}
                 </div>
@@ -747,12 +732,11 @@ elif st.session_state.active_tab == "analysis":
             st.markdown("#### 選項解析 (OPTION ANALYSIS)")
             for item in opts:
                 is_correct = item.get("is_correct", False)
-                symbol = "✓" if is_correct else "✕"
+                symbol = "V" if is_correct else "X"
                 symbol_color = "#10B981" if is_correct else "#EF4444"
                 opt_class = "option-correct" if is_correct else "option-incorrect"
                 opt_text = item.get("text", item.get("option", ""))
                 explanation = item.get("explanation", "")
-
                 st.markdown(
                     f"""
                     <div class="option-item {opt_class}">
@@ -779,7 +763,6 @@ elif st.session_state.active_tab == "analysis":
             )
 
         st.write("")
-        # 重試原題 與 回到解題主頁 按鈕
         if st.button("重試原題", use_container_width=True):
             st.toast("已為您重新開啟試題進行重試！")
             st.session_state.active_tab = "home"
@@ -790,29 +773,27 @@ elif st.session_state.active_tab == "analysis":
             st.session_state.active_tab = "home"
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
-
     else:
-        st.info("目前尚無最新的解題結果,請至「首頁」輸入或上傳題目。")
+        st.info("目前尚無最新的解題結果，請至「首頁」輸入或上傳題目。")
 
 # --- TAB 3: 我的解題紀錄 ---
 elif st.session_state.active_tab == "history":
     st.markdown("### 我的解題紀錄")
-    search_kw = st.text_input(
-        "搜尋關鍵字", placeholder="搜尋答案、題目文字、解析內容...", label_visibility="collapsed"
-    )
+    search_kw = st.text_input("搜尋關鍵字", placeholder="搜尋答案、題目文字、解析內容...", label_visibility="collapsed")
     logs = [l for l in st.session_state.history_logs if l.get("user") == user_name or is_admin]
     if search_kw:
         logs = [l for l in logs if search_kw.lower() in str(l).lower()]
 
     st.caption(f"共 {len(logs)} 筆紀錄")
     if not logs:
-        st.info("尚無解題紀錄!")
+        st.info("尚無解題紀錄！")
     else:
         for idx, item in enumerate(reversed(logs)):
             img_count = len(item.get("images_b64", []))
             feedback = item.get("admin_feedback", {})
             status = feedback.get("status", "pending")
             depth = item.get("depth_mode", "標準詳解")
+
             tag_html = ""
             if status == "correct":
                 tag_html = "<span style='color:#34D399; font-size: 11px; margin-left:6px;'>[已核可]</span>"
@@ -827,7 +808,9 @@ elif st.session_state.active_tab == "history":
                     </div>
                     <div style="flex: 1;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: bold; color: #FFFFFF; font-size: 14px;">{item['subject']} ({item['user']}) <span style='font-size:10px; opacity:0.7;'>[{depth}]</span>{tag_html}</span>
+                            <span style="font-weight: bold; color: #FFFFFF; font-size: 14px;">
+                                {item['subject']} ({item['user']}) <span style='font-size:10px; opacity:0.7;'>[{depth}]</span>{tag_html}
+                            </span>
                             <span style="font-size: 11px; color: #64748B;">{item['time']}</span>
                         </div>
                         <div style="font-size: 13px; color: #CBD5E1; margin-top: 3px;">答案: {item.get('ans', '無')}</div>
@@ -843,7 +826,7 @@ elif st.session_state.active_tab == "history":
 # --- TAB 4: 後台管理員系統 ---
 elif st.session_state.active_tab == "admin":
     if not is_admin:
-        st.error("存取被拒絕:您沒有進入後台管理系統的權限!")
+        st.error("存取被拒絕:您沒有進入後台管理系統的權限！")
         if st.button("返回首頁"):
             st.session_state.active_tab = "home"
             st.rerun()
@@ -851,25 +834,14 @@ elif st.session_state.active_tab == "admin":
 
     all_logs = st.session_state.history_logs
     total_logs_cnt = len(all_logs)
-    reviewed_logs = [
-        l for l in all_logs if l.get("admin_feedback", {}).get("status") in ["correct", "incorrect"]
-    ]
-    correct_cnt = sum(
-        1 for l in reviewed_logs if l.get("admin_feedback", {}).get("status") == "correct"
-    )
+    reviewed_logs = [l for l in all_logs if l.get("admin_feedback", {}).get("status") in ["correct", "incorrect"]]
+    correct_cnt = sum(1 for l in reviewed_logs if l.get("admin_feedback", {}).get("status") == "correct")
     accuracy_rate = (correct_cnt / len(reviewed_logs) * 100) if reviewed_logs else 0.0
 
-    st.markdown(
-        "<h3 style='margin-bottom: 12px;'>⚙️ A.lab 後台管理系統</h3>", unsafe_allow_html=True
-    )
-
+    st.markdown("<h3 style='margin-bottom: 12px;'>A.lab 後台管理系統</h3>", unsafe_allow_html=True)
     total_users_cnt = len(st.session_state.users_db)
     bug_cnt = len(st.session_state.bug_reports)
-    ai_status = (
-        "🟢 正常"
-        if (st.session_state.enable_gemini or st.session_state.enable_openai)
-        else "🔴 停用"
-    )
+    ai_status = "🟢 正常" if (st.session_state.enable_gemini or st.session_state.enable_openai) else "🔴 停用"
 
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
     with m_col1:
@@ -923,15 +895,13 @@ elif st.session_state.active_tab == "admin":
             st.markdown("#### 新增使用者帳號")
             new_username = st.text_input("輸入新使用者帳號", key="new_u_name", placeholder="例如:張小明")
             new_password = st.text_input("預設密碼", value="2580", type="password", key="new_u_pwd")
-            new_limit = st.number_input(
-                "每日解題額度", min_value=1, max_value=99999, value=15, key="new_u_limit"
-            )
+            new_limit = st.number_input("每日解題額度", min_value=1, max_value=99999, value=15, key="new_u_limit")
             if st.button("新增帳號", use_container_width=True):
                 new_username = new_username.strip()
                 if not new_username:
-                    st.error("請輸入使用者帳號!")
+                    st.error("請輸入使用者帳號！")
                 elif new_username in st.session_state.users_db:
-                    st.error(f"帳號 `{new_username}` 已經存在!")
+                    st.error(f"帳號 `{new_username}` 已經存在！")
                 else:
                     st.session_state.users_db[new_username] = {
                         "password": new_password,
@@ -943,7 +913,7 @@ elif st.session_state.active_tab == "admin":
                         "custom_limit": new_limit,
                     }
                     save_config_from_session()
-                    st.success(f"成功新增使用者: {new_username} ！")
+                    st.success(f"成功新增使用者: {new_username}！")
                     st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -951,8 +921,7 @@ elif st.session_state.active_tab == "admin":
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.markdown("#### 刪除使用者帳號")
             deletable_users = [
-                u
-                for u, d in st.session_state.users_db.items()
+                u for u, d in st.session_state.users_db.items()
                 if u != st.session_state.user_name and d.get("role") != "admin"
             ]
             if deletable_users:
@@ -978,7 +947,7 @@ elif st.session_state.active_tab == "admin":
                 if u_data.get("role") != "admin":
                     u_data["custom_limit"] = all_limit_val
             save_config_from_session()
-            st.success(f"已將所有一般使用者的每日上限調至 {all_limit_val} 題!")
+            st.success(f"已將所有一般使用者的每日上限調至 {all_limit_val} 題！")
             st.rerun()
 
         st.divider()
@@ -996,7 +965,7 @@ elif st.session_state.active_tab == "admin":
         if col_single2.button("儲存個別設定", use_container_width=True):
             st.session_state.users_db[selected_user]["custom_limit"] = new_limit
             save_config_from_session()
-            st.success(f"已更新 {selected_user} 的每日額度為 {new_limit} 題!")
+            st.success(f"已更新 {selected_user} 的每日額度為 {new_limit} 題！")
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1019,13 +988,13 @@ elif st.session_state.active_tab == "admin":
             if st.button("新增科目", use_container_width=True):
                 new_sub_clean = new_subject_name.strip()
                 if not new_sub_clean:
-                    st.error("請輸入科目名稱!")
+                    st.error("請輸入科目名稱！")
                 elif new_sub_clean in st.session_state.subjects:
-                    st.error(f"科目 `{new_sub_clean}` 已經存在!")
+                    st.error(f"科目 `{new_sub_clean}` 已經存在！")
                 else:
                     st.session_state.subjects.append(new_sub_clean)
                     save_config_from_session()
-                    st.success(f"成功新增科目: {new_sub_clean} ！")
+                    st.success(f"成功新增科目: {new_sub_clean}！")
                     st.rerun()
 
         with col_sub_del:
@@ -1040,7 +1009,7 @@ elif st.session_state.active_tab == "admin":
                     st.warning(f"已成功刪除科目: {del_subject_target}")
                     st.rerun()
             else:
-                st.info("系統至少需保留一種科目,無法再刪除。")
+                st.info("系統至少需保留一種科目，無法再刪除。")
         st.markdown('</div>', unsafe_allow_html=True)
 
     # 3. 全站紀錄與管理員點評
@@ -1053,9 +1022,7 @@ elif st.session_state.active_tab == "admin":
             filter_col1, filter_col2 = st.columns([1, 2])
             user_list = ["全部使用者"] + list(st.session_state.users_db.keys())
             selected_filter_user = filter_col1.selectbox("過濾使用者帳號", user_list)
-            search_query = filter_col2.text_input(
-                "關鍵字過濾", placeholder="輸入題目內容、答案或觀念關鍵字..."
-            )
+            search_query = filter_col2.text_input("關鍵字過濾", placeholder="輸入題目內容、答案或觀念關鍵字...")
 
             filtered_logs = all_logs
             if selected_filter_user != "全部使用者":
@@ -1064,7 +1031,6 @@ elif st.session_state.active_tab == "admin":
                 filtered_logs = [l for l in filtered_logs if search_query.lower() in str(l).lower()]
 
             st.caption(f"符合條件的紀錄共 {len(filtered_logs)} 筆")
-
             table_data = []
             for item in reversed(filtered_logs):
                 fb_status = item.get("admin_feedback", {}).get("status", "pending")
@@ -1092,7 +1058,6 @@ elif st.session_state.active_tab == "admin":
         for idx, log in enumerate(reversed(filtered_logs)):
             log_id = log.get("id", f"log_{idx}")
             feedback = log.get("admin_feedback", {"status": "pending", "comment": ""})
-
             with st.expander(
                 f"[{log.get('time')}] {log.get('user')} - {log.get('subject')} [{log.get('depth_mode', '標準詳解')}] (AI答案: {log.get('ans')})"
             ):
@@ -1108,7 +1073,7 @@ elif st.session_state.active_tab == "admin":
                 if opts:
                     st.markdown("**選項解析內容:**")
                     for o in opts:
-                        sym = "✓" if o.get("is_correct") else "✕"
+                        sym = "V" if o.get("is_correct") else "X"
                         st.markdown(f"- **{sym} {o.get('text', o.get('option'))}**: {o.get('explanation')}")
 
                 if log.get("images_b64"):
@@ -1117,16 +1082,13 @@ elif st.session_state.active_tab == "admin":
                     for i, img_b64 in enumerate(log["images_b64"]):
                         try:
                             img_bytes = base64.b64decode(img_b64)
-                            img_cols[i % 3].image(
-                                img_bytes, caption=f"圖片{i+1}", use_column_width=True
-                            )
+                            img_cols[i % 3].image(img_bytes, caption=f"圖片{i+1}", use_column_width=True)
                         except Exception:
                             pass
 
                 st.divider()
                 st.markdown("##### 管理員點評區(將計入正確率統計)")
                 c_col1, c_col2 = st.columns([1, 2])
-
                 current_status = feedback.get("status", "pending")
                 status_idx = 0
                 if current_status == "correct":
@@ -1145,7 +1107,6 @@ elif st.session_state.active_tab == "admin":
                     index=status_idx,
                     key=f"status_radio_{log_id}",
                 )
-
                 new_comment = c_col2.text_area(
                     "正確回應與觀念再加強補充",
                     value=feedback.get("comment", ""),
@@ -1153,14 +1114,13 @@ elif st.session_state.active_tab == "admin":
                     key=f"comment_text_{log_id}",
                     height=100,
                 )
-
                 if st.button("儲存點評評語", key=f"save_fb_{log_id}"):
                     log["admin_feedback"] = {
                         "status": new_status_choice,
                         "comment": new_comment,
                     }
                     save_config_from_session()
-                    st.toast("點評已儲存並成功更新統計!", icon="🎉")
+                    st.toast("點評已儲存並成功更新統計！", icon="✅")
                     st.rerun()
 
     # 4. AI 模型設定
@@ -1176,9 +1136,7 @@ elif st.session_state.active_tab == "admin":
             "gemini-2.5-flash",
         ]
         current_gemini = st.session_state.selected_gemini_model
-        gemini_idx = (
-            gemini_options.index(current_gemini) if current_gemini in gemini_options else 0
-        )
+        gemini_idx = gemini_options.index(current_gemini) if current_gemini in gemini_options else 0
 
         with col_ai1:
             st.markdown("##### Google Gemini")
@@ -1194,9 +1152,7 @@ elif st.session_state.active_tab == "admin":
 
         openai_options = ["gpt-4o-mini", "gpt-4o", "o3-mini"]
         current_openai = st.session_state.selected_openai_model
-        openai_idx = (
-            openai_options.index(current_openai) if current_openai in openai_options else 0
-        )
+        openai_idx = openai_options.index(current_openai) if current_openai in openai_options else 0
 
         with col_ai2:
             st.markdown("##### OpenAI GPT")
@@ -1210,7 +1166,7 @@ elif st.session_state.active_tab == "admin":
         st.write("")
         if st.button("儲存 AI 模型設定", use_container_width=True):
             save_config_from_session()
-            st.success("已成功儲存AI 模型設定與服務狀態!")
+            st.success("已成功儲存 AI 模型設定與服務狀態！")
         st.markdown('</div>', unsafe_allow_html=True)
 
     # 5. Bug 回報
@@ -1219,7 +1175,7 @@ elif st.session_state.active_tab == "admin":
         st.markdown("#### 使用者 Bug 與建議回報監控")
         reports = st.session_state.bug_reports
         if not reports:
-            st.info("目前沒有任何待處理的問題回報!")
+            st.info("目前沒有任何待處理的問題回報！")
         else:
             for i, rep in enumerate(reports):
                 st.markdown(f"**回報 #{i+1}**")
