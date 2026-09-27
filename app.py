@@ -508,20 +508,24 @@ with col_h1:
         unsafe_allow_html=True,
     )
 with col_h2:
-    # 外觀主題色彩選擇選單
+    # 外觀主題色彩選擇選單（具備防禦機制）
+    theme_options = ["quiet_blue", "forest_light", "aurora_blue", "dark_gold", "graphite_gray"]
+    current_theme_key = st.session_state.get("theme_color", "graphite_gray")
+    
+    # 安全取得 index，若舊的選單不在列表中則 fallback 回預設值 4 (graphite_gray)
+    theme_index = theme_options.index(current_theme_key) if current_theme_key in theme_options else 4
+
     theme_choice = st.selectbox(
         "外觀主題",
-        options=["quiet_blue", "forest_light", "aurora_blue", "dark_gold", "graphite_gray"],
+        options=theme_options,
         format_func=lambda x: {
             "quiet_blue": "靜謐深藍",
             "forest_light": "森語晨光",
             "aurora_blue": "極光藍境",
             "dark_gold": "墨夜流金",
             "graphite_gray": "玄霧石墨",
-        }[x],
-        index=["quiet_blue", "forest_light", "aurora_blue", "dark_gold", "graphite_gray"].index(
-            st.session_state.theme_color
-        ),
+        }.get(x, "玄霧石墨"),
+        index=theme_index,
         label_visibility="collapsed",
     )
     if theme_choice != st.session_state.theme_color:
@@ -775,7 +779,7 @@ elif st.session_state.active_tab == "analysis":
             )
 
         st.write("")
-        # 新增 重試原題 與 回到解題主頁 按鈕
+        # 重試原題 與 回到解題主頁 按鈕
         if st.button("重試原題", use_container_width=True):
             st.toast("已為您重新開啟試題進行重試！")
             st.session_state.active_tab = "home"
