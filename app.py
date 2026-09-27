@@ -53,24 +53,8 @@ DEFAULT_CONFIG = {
             "total_used": 0,
             "custom_limit": 99999,
         },
-        "蕭翊倫": {
-            "password": "2580",
-            "class_name": "學生",
-            "role": "user",
-            "first_login": True,
-            "used_today": 0,
-            "total_used": 0,
-            "custom_limit": 15,
-        },
-        "測試使用者": {
-            "password": "2580",
-            "class_name": "學生",
-            "role": "user",
-            "first_login": True,
-            "used_today": 0,
-            "total_used": 0,
-            "custom_limit": 15,
-        },
+        
+      
     },
 }
 
