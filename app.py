@@ -34,11 +34,11 @@ FILE_LOCK = threading.Lock()
 
 DEFAULT_CONFIG = {
     "daily_limit": 15,
-    "selected_gemini_model": "gemini-3.1-pro", # 預設改為Gemini 3.1 Pro
+    "selected_gemini_model": "gemini-3.1-pro",
     "selected_openai_model": "gpt-4o-mini",
     "enable_gemini": True,
     "enable_openai": True,
-    "theme_color": "dark_blue",
+    "theme_color": "graphite_gray",
     "subjects": ["化學", "理化", "生物", "地科", "數學", "其他"],
     "bug_reports": [],
     "history_logs": [],
@@ -101,7 +101,6 @@ def save_config_from_session():
     save_config(config_data)
 
 def compress_and_to_b64(img: Image.Image, max_size=(1024, 1024), quality=75) -> str:
-    """自動將圖片轉換格式、縮放並進行JPEG 壓縮"""
     img_copy = img.copy()
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
@@ -113,7 +112,7 @@ def compress_and_to_b64(img: Image.Image, max_size=(1024, 1024), quality=75) -> 
 # ====================
 # 1. 頁面初始化與多色彩樣式
 # ====================
-st.set_page_config(page_title="A.lab | 解題實驗室", page_icon="", layout="centered")
+st.set_page_config(page_title="A.lab | 解題實驗室", page_icon="🧪", layout="centered")
 
 config = load_config()
 
@@ -144,60 +143,61 @@ if "enable_gemini" not in st.session_state:
 if "enable_openai" not in st.session_state:
     st.session_state.enable_openai = config.get("enable_openai", True)
 if "theme_color" not in st.session_state:
-    st.session_state.theme_color = config.get("theme_color", "dark_blue")
+    st.session_state.theme_color = config.get("theme_color", "graphite_gray")
 
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
 
+# 更新為指定的 5 種主題顏色
 THEME_PALETTES = {
-    "dark_blue": {
-        "bg": "#0D1117",
-        "card_bg": "linear-gradient(135deg, #161B22 0%, #0D1117 100%)",
-        "card_border": "#30363D",
-        "primary_btn": "linear-gradient(135deg, #38BDF8 0%, #0284C7 100%)",
+    "quiet_blue": { # 靜謐深藍
+        "bg": "#0B132B",
+        "card_bg": "linear-gradient(135deg, #1C2541 0%, #0B132B 100%)",
+        "card_border": "#3A506B",
+        "primary_btn": "linear-gradient(135deg, #6FFFE9 0%, #5BC0BE 100%)",
+        "btn_text": "#0B132B",
+        "highlight": "#6FFFE9",
+        "badge_bg": "#1C2541",
+    },
+    "forest_light": { # 森語晨光
+        "bg": "#1B261C",
+        "card_bg": "linear-gradient(135deg, #2D3A2E 0%, #1B261C 100%)",
+        "card_border": "#4E6B50",
+        "primary_btn": "linear-gradient(135deg, #A3E635 0%, #65A30D 100%)",
+        "btn_text": "#121A13",
+        "highlight": "#BEF264",
+        "badge_bg": "#2D3A2E",
+    },
+    "aurora_blue": { # 極光藍境
+        "bg": "#0F172A",
+        "card_bg": "linear-gradient(135deg, #1E293B 0%, #0F172A 100%)",
+        "card_border": "#334155",
+        "primary_btn": "linear-gradient(135deg, #38BDF8 0%, #2563EB 100%)",
         "btn_text": "#FFFFFF",
         "highlight": "#38BDF8",
-        "badge_bg": "#1F2937",
+        "badge_bg": "#1E293B",
     },
-    "emerald": {
-        "bg": "#064E3B",
-        "card_bg": "linear-gradient(135deg, #065F46 0%, #022C22 100%)",
-        "card_border": "#059669",
-        "primary_btn": "linear-gradient(135deg, #34D399 0%, #059669 100%)",
-        "btn_text": "#FFFFFF",
-        "highlight": "#6EE7B7",
-        "badge_bg": "#064E3B",
+    "dark_gold": { # 墨夜流金
+        "bg": "#18181B",
+        "card_bg": "linear-gradient(135deg, #27272A 0%, #18181B 100%)",
+        "card_border": "#52525B",
+        "primary_btn": "linear-gradient(135deg, #FACC15 0%, #CA8A04 100%)",
+        "btn_text": "#18181B",
+        "highlight": "#FDE047",
+        "badge_bg": "#27272A",
     },
-    "purple": {
-        "bg": "#2E1065",
-        "card_bg": "linear-gradient(135deg, #3B0764 0%, #1E1B4B 100%)",
-        "card_border": "#7C3AED",
-        "primary_btn": "linear-gradient(135deg, #C084FC 0%, #7E22CE 100%)",
-        "btn_text": "#FFFFFF",
-        "highlight": "#E9D5FF",
-        "badge_bg": "#4C1D95",
-    },
-    "sunset_orange": {
-        "bg": "#431407",
-        "card_bg": "linear-gradient(135deg, #7C2D12 0%, #292524 100%)",
-        "card_border": "#EA580C",
-        "primary_btn": "linear-gradient(135deg, #FB923C 0%, #C2410C 100%)",
-        "btn_text": "#FFFFFF",
-        "highlight": "#FFEDD5",
-        "badge_bg": "#7C2D12",
-    },
-    "sakura_pink": {
-        "bg": "#500724",
-        "card_bg": "linear-gradient(135deg, #831843 0%, #310E17 100%)",
-        "card_border": "#DB2777",
-        "primary_btn": "linear-gradient(135deg, #F472B6 0%, #BE185D 100%)",
-        "btn_text": "#FFFFFF",
-        "highlight": "#FCE7F3",
-        "badge_bg": "#831843",
+    "graphite_gray": { # 玄霧石墨
+        "bg": "#212529",
+        "card_bg": "linear-gradient(135deg, #343A40 0%, #212529 100%)",
+        "card_border": "#495057",
+        "primary_btn": "linear-gradient(135deg, #CED4DA 0%, #adb5bd 100%)",
+        "btn_text": "#212529",
+        "highlight": "#E9ECEF",
+        "badge_bg": "#343A40",
     },
 }
 
-current_theme = THEME_PALETTES.get(st.session_state.theme_color, THEME_PALETTES["dark_blue"])
+current_theme = THEME_PALETTES.get(st.session_state.theme_color, THEME_PALETTES["graphite_gray"])
 
 st.markdown(
     f"""
@@ -265,7 +265,7 @@ st.markdown(
         justify-content: center;
         font-size: 18px;
         font-weight: bold;
-        color: #FFFFFF !important;
+        color: {current_theme["btn_text"]} !important;
     }}
     .quota-badge {{
         background-color: {current_theme["badge_bg"]} !important;
@@ -279,7 +279,7 @@ st.markdown(
         width: 22px;
         height: 22px;
         background: {current_theme["primary_btn"]} !important;
-        color: #FFFFFF !important;
+        color: {current_theme["btn_text"]} !important;
         border-radius: 6px;
         text-align: center;
         line-height: 22px;
@@ -313,6 +313,19 @@ st.markdown(
         border-radius: 10px !important;
     }}
     label {{ color: #F8FAFC !important; }}
+    .option-item {{
+        background: rgba(255,255,255,0.03);
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        border-left: 3px solid #64748B;
+    }}
+    .option-correct {{
+        border-left-color: #10B981 !important;
+    }}
+    .option-incorrect {{
+        border-left-color: #EF4444 !important;
+    }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -392,15 +405,31 @@ if not st.session_state.logged_in:
 # ====================
 # 3. AI 核心邏輯
 # ====================
-def build_system_prompt(subject: str = "通用"):
+def build_system_prompt(subject: str = "通用", depth_mode: str = "標準詳解"):
+    depth_instructions = {
+        "精簡解答": "請提供最直觀的核心觀念與必要的重點計算步驟，語言精煉不贅述。",
+        "標準詳解": "請提供完整的推理過程、步驟拆解、公式推導與概念說明，適合常規學習觀看。",
+        "深度解析": "請提供極其詳細的引申觀念、原理探討、易錯陷阱提醒以及多維度的邏輯剖析。"
+    }
+    selected_depth_desc = depth_instructions.get(depth_mode, depth_instructions["標準詳解"])
+
     return f"""你是一位專業嚴謹的【{subject}】領域萬能 AI 導師。
-請針對使用者提出的問題(無論是文字敘述或圖片題目)進行【{subject}】領域精準解答與深度邏輯剖析。
+本次解題要求深度為：【{depth_mode}】（{selected_depth_desc}）。
+
+請針對使用者提出的問題進行【{subject}】領域精準解答。
 請嚴格回傳JSON格式(不要包裹在 markdown codeblock 中):
 {{
     "ans": "正確答案選項或簡短最終結果",
-    "reasoning": "步驟清晰、邏輯嚴謹的詳細觀念推導過程"
+    "reasoning": "步驟清晰、邏輯嚴謹的詳細觀念推導過程",
+    "options_analysis": [
+        {{"option": "(A)", "is_correct": true, "text": "(A) 敘述內容", "explanation": "針對選項A的具體對錯分析與說明"}},
+        {{"option": "(B)", "is_correct": false, "text": "(B) 敘述內容", "explanation": "針對選項B的具體對錯分析與說明"}}
+    ]
 }}
-遇到公式請使用標準 LaTeX 語法(如 $E=mc^{{2}}$) 。請以繁體中文回答。"""
+
+說明：
+1. 若題目包含選擇題選項（如 A, B, C, D, E 等），請務必填充 `options_analysis` 陣列，逐一評估每個選項的正確與否 (`is_correct`: true/false) 並給出簡要解析。若非選擇題或無具體選項，`options_analysis` 可為空陣列 `[]`。
+2. 遇到公式請使用標準 LaTeX 語法(如 $E=mc^{{2}}$) 。請以繁體中文回答。"""
 
 def extract_text_from_images(image_list: list, extra_info: str = "", subject: str = "通用") -> str:
     if not GEMINI_API_KEY or not image_list or not st.session_state.enable_gemini:
@@ -415,13 +444,13 @@ def extract_text_from_images(image_list: list, extra_info: str = "", subject: st
     except Exception as e:
         return f"[圖片辨識說明]: {str(e)}"
 
-def call_ai_solver(question_text, subject="通用", retries=2):
+def call_ai_solver(question_text, subject="通用", depth_mode="標準詳解", retries=2):
     if not st.session_state.enable_gemini and not st.session_state.enable_openai:
-        return "服務已關閉", "管理員目前已關閉所有AI解題服務系統。"
+        return "服務已關閉", "管理員目前已關閉所有AI解題服務系統。", []
     if not GEMINI_API_KEY and not OPENAI_API_KEY:
-        return "未設定 API Key", "請在 secrets.toml 中設定 API Key。"
+        return "未設定 API Key", "請在 secrets.toml 中設定 API Key。", []
 
-    sys_prompt = build_system_prompt(subject)
+    sys_prompt = build_system_prompt(subject, depth_mode)
     prompt = f"{sys_prompt}\n\n【{subject}】題目需求與描述:\n{question_text}"
 
     for attempt in range(retries + 1):
@@ -433,7 +462,7 @@ def call_ai_solver(question_text, subject="通用", retries=2):
                 )
                 raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
                 data = json.loads(raw)
-                return data.get("ans", "無解答"), data.get("reasoning", "無解析內容")
+                return data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
 
             if OPENAI_API_KEY and st.session_state.enable_openai:
                 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -446,18 +475,18 @@ def call_ai_solver(question_text, subject="通用", retries=2):
                     ],
                 )
                 data = json.loads(resp.choices[0].message.content)
-                return data.get("ans", "無解答"), data.get("reasoning", "無解析內容")
+                return data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
         except json.JSONDecodeError:
             if attempt < retries:
                 time.sleep(1)
                 continue
-            return "解析格式錯誤", "AI回傳格式不符 JSON 規範，請重試一次。"
+            return "解析格式錯誤", "AI回傳格式不符 JSON 規範，請重試一次。", []
         except Exception as e:
             if attempt < retries:
                 time.sleep(1)
                 continue
-            return "解析失敗", f"呼叫AI時發生錯誤: {str(e)}"
-    return "解析失敗", "無法存取AI模型或相關服務連線逾時。"
+            return "解析失敗", f"呼叫AI時發生錯誤: {str(e)}", []
+    return "解析失敗", "無法存取AI模型或相關服務連線逾時。", []
 
 # ====================
 # 4. 主介面 Header 與用戶資訊卡片
@@ -470,7 +499,7 @@ with col_h1:
             <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 24px;">🧪</span>
                 <div>
-                    <div class="header-title">A.lab | 解題實驗室</div>
+                    <div class="header-title">A.lab | 解題實驗室 2.0.5</div>
                     <div class="header-sub">Science Lab Platform</div>
                 </div>
             </div>
@@ -479,17 +508,18 @@ with col_h1:
         unsafe_allow_html=True,
     )
 with col_h2:
+    # 外觀主題色彩選擇選單
     theme_choice = st.selectbox(
-        "主題色彩",
-        options=["dark_blue", "emerald", "purple", "sunset_orange", "sakura_pink"],
+        "外觀主題",
+        options=["quiet_blue", "forest_light", "aurora_blue", "dark_gold", "graphite_gray"],
         format_func=lambda x: {
-            "dark_blue": "深藍",
-            "emerald": "翡翠綠",
-            "purple": "夢幻紫",
-            "sunset_orange": "熾焰橘",
-            "sakura_pink": "櫻花粉",
+            "quiet_blue": "靜謐深藍",
+            "forest_light": "森語晨光",
+            "aurora_blue": "極光藍境",
+            "dark_gold": "墨夜流金",
+            "graphite_gray": "玄霧石墨",
         }[x],
-        index=["dark_blue", "emerald", "purple", "sunset_orange", "sakura_pink"].index(
+        index=["quiet_blue", "forest_light", "aurora_blue", "dark_gold", "graphite_gray"].index(
             st.session_state.theme_color
         ),
         label_visibility="collapsed",
@@ -540,7 +570,7 @@ cols = st.columns(4 if is_admin else 3)
 if cols[0].button("首頁", use_container_width=True):
     st.session_state.active_tab = "home"
     st.rerun()
-if cols[1].button("最新解析", use_container_width=True):
+if cols[1].button("解題解析", use_container_width=True):
     st.session_state.active_tab = "analysis"
     st.rerun()
 if cols[2].button("解題紀錄", use_container_width=True):
@@ -592,11 +622,20 @@ if st.session_state.active_tab == "home":
     st.markdown(
         """
         <div style="font-size: 15px; font-weight: bold; color: #FFFFFF; margin-top: 16px; margin-bottom: 8px;">
-            <span class="step-number">2</span> 設定科目與額外資訊
+            <span class="step-number">2</span> 設定解說深度與科目資訊
         </div>
         """,
         unsafe_allow_html=True,
     )
+    
+    depth_mode = st.radio(
+        "解說深度",
+        options=["精簡解答", "標準詳解", "深度解析"],
+        index=1,
+        horizontal=True,
+        help="【精簡解答】掌握核心觀念與簡潔步驟\n【標準詳解】完整步驟與觀念推導\n【深度解析】包含引申觀念與易錯點剖析",
+    )
+
     selected_subject = st.selectbox("選擇題目科目", st.session_state.subjects, index=0)
     ref_answer = st.text_input("標準參考答案(選填)", placeholder="例如B、ACD、2.5 mol...")
 
@@ -613,7 +652,7 @@ if st.session_state.active_tab == "home":
         elif not uploaded_files and not text_question.strip():
             st.warning("請輸入文字題目或上傳題目圖片!")
         else:
-            with st.spinner(f"A.lab AI 正在針對【{selected_subject}】進行分析與解題中..."):
+            with st.spinner(f"A.lab AI 正在以【{depth_mode}】模式針對【{selected_subject}】進行分析中..."):
                 images_to_process = (
                     cropped_images
                     if cropped_images
@@ -633,7 +672,9 @@ if st.session_state.active_tab == "home":
                 if ocr_text:
                     combined_question += f"圖片題目辨識內容:\n{ocr_text}"
 
-                ans, reasoning = call_ai_solver(combined_question, subject=selected_subject)
+                ans, reasoning, options_analysis = call_ai_solver(
+                    combined_question, subject=selected_subject, depth_mode=depth_mode
+                )
                 images_b64 = [compress_and_to_b64(img) for img in images_to_process]
 
                 new_record = {
@@ -641,10 +682,12 @@ if st.session_state.active_tab == "home":
                     "user": user_name,
                     "time": get_taipei_now_str(),
                     "subject": selected_subject,
+                    "depth_mode": depth_mode,
                     "ref_answer": ref_answer or "無",
                     "note": text_question or "無",
                     "ans": ans,
                     "reasoning": reasoning,
+                    "options_analysis": options_analysis,
                     "images_b64": images_b64,
                     "admin_feedback": {
                         "status": "pending",
@@ -656,17 +699,22 @@ if st.session_state.active_tab == "home":
                 user_info["used_today"] += 1
                 save_config_from_session()
                 st.toast("解題完成!", icon="🎉")
+                
+                # 自動跳轉至「解題解析」頁面
                 st.session_state.active_tab = "analysis"
                 st.rerun()
 
-# --- TAB 2: 解析結果 ---
+# --- TAB 2: 解題解析 ---
 elif st.session_state.active_tab == "analysis":
-    st.markdown("### 最新解題觀念解析")
+    st.markdown("### 解題解析")
+    st.caption("答案 → 觀念詳解 → 選項解析 → 追問")
+
     if "latest_analysis" in st.session_state and st.session_state.latest_analysis:
         res = st.session_state.latest_analysis
         feedback = res.get("admin_feedback", {})
         status = feedback.get("status", "pending")
         comment = feedback.get("comment", "")
+        depth = res.get("depth_mode", "標準詳解")
 
         status_badge = ""
         if status == "correct":
@@ -678,7 +726,7 @@ elif st.session_state.active_tab == "analysis":
             f"""
             <div class="custom-card">
                 <div style="display: flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
-                    <div style="color: {current_theme['highlight']}; font-weight: bold; font-size: 16px;">[{res['subject']}] 觀念拆解與解答</div>
+                    <div style="color: {current_theme['highlight']}; font-weight: bold; font-size: 16px;">[{res['subject']}] 觀念拆解與解答 <span style="font-size:12px; opacity:0.8;">({depth})</span></div>
                     <div>{status_badge}</div>
                 </div>
                 <div style="font-size: 13px; color: #94A3B8; margin-bottom: 6px;">標準參考答案: <b style="color:#FFFFFF;">{res['ref_answer']}</b> | AI 答案: <b style="color:{current_theme['highlight']};">{res['ans']}</b></div>
@@ -690,6 +738,31 @@ elif st.session_state.active_tab == "analysis":
             unsafe_allow_html=True,
         )
 
+        opts = res.get("options_analysis", [])
+        if opts:
+            st.markdown("#### 選項解析 (OPTION ANALYSIS)")
+            for item in opts:
+                is_correct = item.get("is_correct", False)
+                symbol = "✓" if is_correct else "✕"
+                symbol_color = "#10B981" if is_correct else "#EF4444"
+                opt_class = "option-correct" if is_correct else "option-incorrect"
+                opt_text = item.get("text", item.get("option", ""))
+                explanation = item.get("explanation", "")
+
+                st.markdown(
+                    f"""
+                    <div class="option-item {opt_class}">
+                        <div style="font-weight: bold; color: {symbol_color}; font-size: 15px;">
+                            {symbol} {opt_text}
+                        </div>
+                        <div style="font-size: 13px; color: #CBD5E1; margin-top: 4px; line-height: 1.4;">
+                            {explanation}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
         if comment:
             st.markdown(
                 f"""
@@ -700,6 +773,20 @@ elif st.session_state.active_tab == "analysis":
                 """,
                 unsafe_allow_html=True,
             )
+
+        st.write("")
+        # 新增 重試原題 與 回到解題主頁 按鈕
+        if st.button("重試原題", use_container_width=True):
+            st.toast("已為您重新開啟試題進行重試！")
+            st.session_state.active_tab = "home"
+            st.rerun()
+
+        st.markdown('<div class="secondary-btn">', unsafe_allow_html=True)
+        if st.button("回到解題主頁", use_container_width=True):
+            st.session_state.active_tab = "home"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
     else:
         st.info("目前尚無最新的解題結果,請至「首頁」輸入或上傳題目。")
 
@@ -721,6 +808,7 @@ elif st.session_state.active_tab == "history":
             img_count = len(item.get("images_b64", []))
             feedback = item.get("admin_feedback", {})
             status = feedback.get("status", "pending")
+            depth = item.get("depth_mode", "標準詳解")
             tag_html = ""
             if status == "correct":
                 tag_html = "<span style='color:#34D399; font-size: 11px; margin-left:6px;'>[已核可]</span>"
@@ -735,7 +823,7 @@ elif st.session_state.active_tab == "history":
                     </div>
                     <div style="flex: 1;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: bold; color: #FFFFFF; font-size: 14px;">{item['subject']} ({item['user']}){tag_html}</span>
+                            <span style="font-weight: bold; color: #FFFFFF; font-size: 14px;">{item['subject']} ({item['user']}) <span style='font-size:10px; opacity:0.7;'>[{depth}]</span>{tag_html}</span>
                             <span style="font-size: 11px; color: #64748B;">{item['time']}</span>
                         </div>
                         <div style="font-size: 13px; color: #CBD5E1; margin-top: 3px;">答案: {item.get('ans', '無')}</div>
@@ -826,7 +914,6 @@ elif st.session_state.active_tab == "admin":
         st.markdown('</div>', unsafe_allow_html=True)
 
         col_add, col_del = st.columns(2)
-        # + 新增使用者帳號
         with col_add:
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.markdown("#### 新增使用者帳號")
@@ -856,7 +943,6 @@ elif st.session_state.active_tab == "admin":
                     st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # X 刪除使用者帳號
         with col_del:
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.markdown("#### 刪除使用者帳號")
@@ -876,7 +962,6 @@ elif st.session_state.active_tab == "admin":
                 st.info("目前沒有可供刪除的一般使用者帳號。")
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # 額度調整
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### 解題額度調整機制")
         st.markdown("**1. 快速批量統一設定(全體一般使用者)**")
@@ -922,7 +1007,6 @@ elif st.session_state.active_tab == "admin":
         st.divider()
 
         col_sub_add, col_sub_del = st.columns(2)
-        # + 新增科目
         with col_sub_add:
             st.markdown("##### 新增科目")
             new_subject_name = st.text_input(
@@ -940,7 +1024,6 @@ elif st.session_state.active_tab == "admin":
                     st.success(f"成功新增科目: {new_sub_clean} ！")
                     st.rerun()
 
-        # X 刪除科目
         with col_sub_del:
             st.markdown("##### 刪除科目")
             if len(st.session_state.subjects) > 1:
@@ -992,6 +1075,7 @@ elif st.session_state.active_tab == "admin":
                         "時間": item.get("time", "未知"),
                         "使用者": item.get("user", "未知"),
                         "科目": item.get("subject", "未定"),
+                        "解說深度": item.get("depth_mode", "標準詳解"),
                         "AI答案": item.get("ans", "無"),
                         "管理員審核": status_str,
                         "題目/文字備註": item.get("note", "無"),
@@ -1006,15 +1090,22 @@ elif st.session_state.active_tab == "admin":
             feedback = log.get("admin_feedback", {"status": "pending", "comment": ""})
 
             with st.expander(
-                f"[{log.get('time')}] {log.get('user')} - {log.get('subject')} (AI答案: {log.get('ans')})"
+                f"[{log.get('time')}] {log.get('user')} - {log.get('subject')} [{log.get('depth_mode', '標準詳解')}] (AI答案: {log.get('ans')})"
             ):
                 st.markdown(
-                    f"**發問使用者:** `{log.get('user')}` | **科目:** `{log.get('subject')}` | **提問時間:** `{log.get('time')}`"
+                    f"**發問使用者:** `{log.get('user')}` | **科目:** `{log.get('subject')}` | **解說深度:** `{log.get('depth_mode', '標準詳解')}` | **提問時間:** `{log.get('time')}`"
                 )
                 st.markdown(f"**標註參考答案:** {log.get('ref_answer')}")
                 st.markdown(f"**題目文字描述:**\n{log.get('note')}")
                 st.markdown(f"**AI 答案:** `{log.get('ans')}`")
                 st.markdown(f"**觀念詳細推導解析:**\n{log.get('reasoning')}")
+
+                opts = log.get("options_analysis", [])
+                if opts:
+                    st.markdown("**選項解析內容:**")
+                    for o in opts:
+                        sym = "✓" if o.get("is_correct") else "✕"
+                        st.markdown(f"- **{sym} {o.get('text', o.get('option'))}**: {o.get('explanation')}")
 
                 if log.get("images_b64"):
                     st.write("上傳題目原圖:")
