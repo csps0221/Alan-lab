@@ -113,7 +113,6 @@ def compress_and_to_b64(img: Image.Image, max_size=(1024, 1024), quality=75) -> 
 # 1. 頁面初始化與多色彩樣式
 # ====================
 st.set_page_config(page_title="A.lab | 解題實驗室", page_icon="🧪", layout="centered")
-
 config = load_config()
 
 if "history_logs" not in st.session_state:
@@ -374,22 +373,20 @@ if not st.session_state.logged_in:
         """,
         unsafe_allow_html=True,
     )
-
     if st.session_state.must_change_pwd:
         with st.container():
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-            st.markdown("### 初次登入 - 請修改密碼")
-            st.info("為了您的帳號安全，第一次登入請設定新密碼！")
+            st.markdown("### 初次登入-請修改密碼")
+            st.info("為了您的帳號安全,第一次登入請設定新密碼!")
             with st.form("change_password_form", clear_on_submit=False):
                 new_pwd = st.text_input("輸入新密碼", type="password", placeholder="請輸入新密碼")
                 confirm_pwd = st.text_input("確認新密碼", type="password", placeholder="請再次輸入新密碼")
                 pwd_submit = st.form_submit_button("確認修改並登入", use_container_width=True)
-
                 if pwd_submit:
                     if not new_pwd:
-                        st.error("新密碼不可為空白！")
+                        st.error("新密碼不可為空白!")
                     elif new_pwd != confirm_pwd:
-                        st.error("兩次輸入的密碼不一致，請重新確認！")
+                        st.error("兩次輸入的密碼不一致,請重新確認!")
                     else:
                         user_n = st.session_state.temp_user
                         st.session_state.users_db[user_n]["password"] = new_pwd
@@ -401,7 +398,7 @@ if not st.session_state.logged_in:
                         st.session_state.login_logs.append({"user": user_n, "time": get_taipei_now_str()})
                         save_config_from_session()
                         components.html(f"<script>localStorage.setItem('alab_user', '{user_n}');</script>", height=0)
-                        st.success("密碼修改成功！正在進入系統...")
+                        st.success("密碼修改成功!正在進入系統...")
                         st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
             st.stop()
@@ -413,7 +410,6 @@ if not st.session_state.logged_in:
             input_username = st.text_input("帳號", placeholder="請輸入帳號")
             input_password = st.text_input("密碼", type="password", placeholder="請輸入密碼")
             login_submitted = st.form_submit_button("登入系統", use_container_width=True)
-
             if login_submitted:
                 users = st.session_state.users_db
                 if input_username in users and users[input_username]["password"] == input_password:
@@ -428,10 +424,10 @@ if not st.session_state.logged_in:
                         st.session_state.login_logs.append({"user": input_username, "time": get_taipei_now_str()})
                         save_config_from_session()
                         components.html(f"<script>localStorage.setItem('alab_user', '{input_username}');</script>", height=0)
-                        st.toast(f"歡迎回來，{input_username}！")
+                        st.toast(f"歡迎回來, {input_username} !")
                         st.rerun()
                 else:
-                    st.error("帳號或密碼錯誤，請重新確認！")
+                    st.error("帳號或密碼錯誤,請重新確認!")
         st.markdown('</div>', unsafe_allow_html=True)
         st.stop()
 
@@ -440,8 +436,8 @@ if not st.session_state.logged_in:
 # ====================
 def build_system_prompt(subject: str = "通用", depth_mode: str = "標準詳解"):
     depth_instructions = {
-        "精簡解答": "請提供最直觀的核心觀念與必要的重點計算步驟，語言精煉不贅述。",
-        "標準詳解": "請提供完整的推理過程、步驟拆解、公式推導與概念說明，適合常規學習觀看。",
+        "精簡解答": "請提供最直觀的核心觀念與必要的重點計算步驟,語言精煉不贅述。",
+        "標準詳解": "請提供完整的推理過程、步驟拆解、公式推導與概念說明,適合常規學習觀看。",
         "深度解析": "請提供極其詳細的引申觀念、原理探討、易錯陷阱提醒以及多維度的邏輯剖析。"
     }
     selected_depth_desc = depth_instructions.get(depth_mode, depth_instructions["標準詳解"])
@@ -458,8 +454,8 @@ def build_system_prompt(subject: str = "通用", depth_mode: str = "標準詳解
   ]
 }}
 說明:
-1. 若題目包含選擇題選項(如A, B, C, D, E等),請務必填充`options_analysis`陣列,逐一評估每個選項的正確與否(`is_correct`: true/false) 並給出簡要解析。若非選擇題或無具體選項, `options_analysis`可為空陣列 []。
-2. 遇到公式請使用標準 LaTeX 語法(如 $E=mc^{{2}}$)。請以繁體中文回答。"""
+1. 若題目包含選擇題選項(如A, B, C, D, E等),請務必填充 options_analysis 陣列,逐一評估每個選項的正確與否(is_correct: true/false) 並給出簡要解析。若非選擇題或無具體選項, options_analysis 可為空陣列。
+2. 遇到公式請使用標準 LaTeX語法(如 $E=mc^{{2}}$)。請以繁體中文回答。"""
 
 def extract_text_from_images(image_list: list, extra_info: str = "", subject: str = "通用") -> str:
     if not GEMINI_API_KEY or not image_list or not st.session_state.enable_gemini:
@@ -480,10 +476,9 @@ def call_ai_solver(question_text, subject="通用", depth_mode="標準詳解", r
         return "服務已關閉", "管理員目前已關閉所有AI解題服務系統。", []
     if not GEMINI_API_KEY and not OPENAI_API_KEY:
         return "未設定 API Key", "請在 secrets.toml 中設定 API Key。", []
-
     sys_prompt = build_system_prompt(subject, depth_mode)
     prompt = f"{sys_prompt}\n\n【{subject}】題目需求與描述:\n{question_text}"
-
+    
     for attempt in range(retries + 1):
         try:
             if GEMINI_API_KEY and st.session_state.enable_gemini:
@@ -518,15 +513,14 @@ def call_ai_solver(question_text, subject="通用", depth_mode="標準詳解", r
                 time.sleep(1)
                 continue
             return "解析失敗", f"呼叫AI時發生錯誤: {str(e)}", []
-    
     return "解析失敗", "無法存取AI模型或相關服務連線逾時。", []
 
 # ====================
 # 4. 主介面 Header 與用戶資訊卡片
 # ====================
 is_locked = st.session_state.get("is_processing", False)
-col_h1, col_h2 = st.columns([3, 1])
 
+col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
     st.markdown(
         """
@@ -542,7 +536,6 @@ with col_h1:
         """,
         unsafe_allow_html=True,
     )
-
 with col_h2:
     theme_options = ["quiet_blue", "forest_light", "aurora_blue", "dark_gold", "graphite_gray"]
     current_theme_key = st.session_state.get("theme_color", "graphite_gray")
@@ -567,7 +560,6 @@ with col_h2:
         st.rerun()
 
 st.write("")
-
 user_name = st.session_state.user_name
 user_info = st.session_state.users_db.get(user_name, {"class_name": "使用者", "used_today": 0, "custom_limit": 15})
 class_name = user_info.get("class_name", "使用者")
@@ -595,39 +587,30 @@ with col_head1:
         """,
         unsafe_allow_html=True,
     )
-
 with col_head2:
     st.markdown('<div class="secondary-btn" style="margin-top: 8px;">', unsafe_allow_html=True)
     if st.button("登出", use_container_width=True, disabled=is_locked):
         st.session_state.logged_in = False
         st.query_params.clear()
-        components.html(
-            "<script>localStorage.removeItem('alab_user'); window.location.href = window.location.pathname;</script>",
-            height=0
-        )
+        components.html("<script>localStorage.removeItem('alab_user'); window.location.href = window.location.pathname;</script>", height=0)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.write("")
-
 is_admin = st.session_state.get("user_role") == "admin"
 cols = st.columns(4 if is_admin else 3)
-
 if cols[0].button("首頁", use_container_width=True, disabled=is_locked):
     st.session_state.active_tab = "home"
     st.rerun()
-
 if cols[1].button("解題解析", use_container_width=True, disabled=is_locked):
     if not st.session_state.get("latest_analysis") and not st.session_state.get("is_processing"):
         st.warning("請先在首頁輸入或上傳題目並點擊「開始解題」!")
     else:
         st.session_state.active_tab = "analysis"
         st.rerun()
-
 if cols[2].button("解題紀錄", use_container_width=True, disabled=is_locked):
     st.session_state.active_tab = "history"
     st.rerun()
-
 if is_admin and cols[3].button("後台", use_container_width=True, disabled=is_locked):
     st.session_state.active_tab = "admin"
     st.rerun()
@@ -658,7 +641,7 @@ if st.session_state.active_tab == "home":
         "上傳題目圖片(選填,可1~5張)",
         type=["png", "jpg", "jpeg"],
         accept_multiple_files=True,
-        disabled=is_locked
+        disabled=is_locked,
     )
     
     cropped_images = []
@@ -666,7 +649,7 @@ if st.session_state.active_tab == "home":
         st.markdown("#### 圖片裁切預覽")
         for i, f in enumerate(uploaded_files):
             img = Image.open(f)
-            st.write(f"圖片 {i+1}:")
+            st.write(f"圖片{i+1}:")
             cropped_img = st_cropper(
                 img,
                 realtime_update=True,
@@ -687,21 +670,21 @@ if st.session_state.active_tab == "home":
     st.write("選擇解說深度:")
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     current_depth = st.session_state.get("selected_depth_mode", "標準詳解")
-
+    
     with btn_col1:
         is_active = (current_depth == "精簡解答")
         btn_type = "primary" if is_active else "secondary"
         if st.button("精簡解答", use_container_width=True, key="depth_btn_1", type=btn_type, disabled=is_locked):
             st.session_state.selected_depth_mode = "精簡解答"
             st.rerun()
-
+            
     with btn_col2:
         is_active = (current_depth == "標準詳解")
         btn_type = "primary" if is_active else "secondary"
         if st.button("標準詳解", use_container_width=True, key="depth_btn_2", type=btn_type, disabled=is_locked):
             st.session_state.selected_depth_mode = "標準詳解"
             st.rerun()
-
+            
     with btn_col3:
         is_active = (current_depth == "深度解析")
         btn_type = "primary" if is_active else "secondary"
@@ -755,7 +738,7 @@ elif st.session_state.active_tab == "analysis":
         st.caption("答題 → 觀念拆解 → 選項解析 → 追問")
         status_card = st.empty()
         progress_bar = st.empty()
-
+        
         task = st.session_state.pending_task
         selected_subject = task["selected_subject"]
         depth_mode = task["depth_mode"]
@@ -763,7 +746,7 @@ elif st.session_state.active_tab == "analysis":
         uploaded_files = task["uploaded_files"]
         cropped_images = task["cropped_images"]
         ref_answer = task["ref_answer"]
-
+        
         progress_steps = [
             (15, "正在啟動AI解題引擎..."),
             (35, "正在辨識題目內容與選項..."),
@@ -771,7 +754,7 @@ elif st.session_state.active_tab == "analysis":
             (85, "正在生成選項分析與步驟說明..."),
             (95, "正在整理最終答題報告...")
         ]
-
+        
         for p_val, msg in progress_steps:
             status_card.markdown(
                 f"""
@@ -788,15 +771,9 @@ elif st.session_state.active_tab == "analysis":
             time.sleep(0.3)
 
         with st.spinner("最後確認中..."):
-            images_to_process = (
-                cropped_images if cropped_images 
-                else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
-            )
-            ocr_text = (
-                extract_text_from_images(images_to_process, text_question, subject=selected_subject)
-                if images_to_process else ""
-            )
-
+            images_to_process = cropped_images if cropped_images else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
+            ocr_text = extract_text_from_images(images_to_process, text_question, subject=selected_subject) if images_to_process else ""
+            
             combined_question = ""
             if text_question.strip():
                 combined_question += f"使用者文字題目/補充:\n{text_question.strip()}\n\n"
@@ -806,9 +783,8 @@ elif st.session_state.active_tab == "analysis":
             ans, reasoning, options_analysis = call_ai_solver(
                 combined_question, subject=selected_subject, depth_mode=depth_mode
             )
-
+            
             images_b64 = [compress_and_to_b64(img) for img in images_to_process]
-
             new_record = {
                 "id": str(time.time()),
                 "user": user_name,
@@ -826,24 +802,25 @@ elif st.session_state.active_tab == "analysis":
                     "comment": ""
                 },
             }
-
+            
             st.session_state.history_logs.append(new_record)
             st.session_state.latest_analysis = new_record
             user_info["used_today"] += 1
             save_config_from_session()
+            
             st.session_state.is_processing = False
             del st.session_state.pending_task
             st.rerun()
 
     elif "latest_analysis" in st.session_state and st.session_state.latest_analysis:
         st.markdown("### 解題解析")
-        st.caption("答案 → 觀念拆解 → 選項解析 → 追問")
+        st.caption("答案→觀念拆解→選項解析→追問")
         res = st.session_state.latest_analysis
         feedback = res.get("admin_feedback", {})
         status = feedback.get("status", "pending")
         comment = feedback.get("comment", "")
         depth = res.get("depth_mode", "標準詳解")
-
+        
         status_badge = ""
         if status == "correct":
             status_badge = "<span style='background:#059669; color:white; padding:2px 8px; border-radius:6px; font-size:12px;'>管理員審核:正確</span>"
@@ -880,7 +857,6 @@ elif st.session_state.active_tab == "analysis":
                 opt_class = "option-correct" if is_correct else "option-incorrect"
                 opt_text = item.get("text", item.get("option", ""))
                 explanation = item.get("explanation", "")
-
                 st.markdown(
                     f"""
                     <div class="option-item {opt_class}">
@@ -924,13 +900,11 @@ elif st.session_state.active_tab == "analysis":
 elif st.session_state.active_tab == "history":
     st.markdown("### 我的解題紀錄")
     search_kw = st.text_input("搜尋關鍵字", placeholder="搜尋答案、題目文字、解析內容...", label_visibility="collapsed")
-    
     logs = [l for l in st.session_state.history_logs if l.get("user") == user_name or is_admin]
     if search_kw:
         logs = [l for l in logs if search_kw.lower() in str(l).lower()]
-
+    
     st.caption(f"共 {len(logs)} 筆紀錄")
-
     if not logs:
         st.info("尚無解題紀錄!")
     else:
@@ -939,7 +913,6 @@ elif st.session_state.active_tab == "history":
             feedback = item.get("admin_feedback", {})
             status = feedback.get("status", "pending")
             depth = item.get("depth_mode", "標準詳解")
-
             tag_html = ""
             if status == "correct":
                 tag_html = "<span style='color:#34D399; font-size: 11px; margin-left: 6px;'>[已核可]</span>"
@@ -985,35 +958,21 @@ elif st.session_state.active_tab == "admin":
     accuracy_rate = (correct_cnt / len(reviewed_logs) * 100) if reviewed_logs else 0.0
 
     st.markdown("<h3 style='margin-bottom: 12px;'>A.lab 後台管理系統</h3>", unsafe_allow_html=True)
-
     total_users_cnt = len(st.session_state.users_db)
     bug_cnt = len(st.session_state.bug_reports)
     ai_status = "正常" if (st.session_state.enable_gemini or st.session_state.enable_openai) else "停用"
 
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
     with m_col1:
-        st.markdown(
-            f'<div class="admin-stat-card"><div class="admin-stat-num">{total_users_cnt}</div><div class="admin-stat-label">註冊使用者</div></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="admin-stat-card"><div class="admin-stat-num">{total_users_cnt}</div><div class="admin-stat-label">註冊使用者</div></div>', unsafe_allow_html=True)
     with m_col2:
-        st.markdown(
-            f'<div class="admin-stat-card"><div class="admin-stat-num">{total_logs_cnt}</div><div class="admin-stat-label">累積解題量</div></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="admin-stat-card"><div class="admin-stat-num">{total_logs_cnt}</div><div class="admin-stat-label">累積解題量</div></div>', unsafe_allow_html=True)
     with m_col3:
-        st.markdown(
-            f'<div class="admin-stat-card"><div class="admin-stat-num">{accuracy_rate:.1f}%</div><div class="admin-stat-label">解答正確率({len(reviewed_logs)}筆已審)</div></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="admin-stat-card"><div class="admin-stat-num">{accuracy_rate:.1f}%</div><div class="admin-stat-label">解答正確率({len(reviewed_logs)}筆已審)</div></div>', unsafe_allow_html=True)
     with m_col4:
-        st.markdown(
-            f'<div class="admin-stat-card"><div class="admin-stat-num" style="font-size:16px;">{ai_status}</div><div class="admin-stat-label">AI引擎狀態</div></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="admin-stat-card"><div class="admin-stat-num" style="font-size:16px;">{ai_status}</div><div class="admin-stat-label">AI引擎狀態</div></div>', unsafe_allow_html=True)
 
     st.write("")
-
     admin_tab1, admin_tab2, admin_tab3, admin_tab4, admin_tab5 = st.tabs(
         ["使用者與權限", "科目管理", "解題點評與歷史紀錄", "AI 模型設定", "Bug回報"]
     )
@@ -1031,7 +990,7 @@ elif st.session_state.active_tab == "admin":
                         "身分類別": udata.get("class_name", "使用者"),
                         "權限角色": "一般使用者",
                         "今日已用": f"{udata.get('used_today', 0)} 題",
-                        "每日額度上限": f"{udata.get('custom_limit', 15)} 題",
+                        "每日額度上限": f"{udata.get('custom_limit', 15)}題",
                         "首次登入狀態": "待修改密碼" if udata.get("first_login") else "已修改密碼",
                     }
                 )
@@ -1044,14 +1003,13 @@ elif st.session_state.active_tab == "admin":
             st.markdown("#### 新增使用者帳號")
             new_username = st.text_input("輸入新使用者帳號", key="new_u_name", placeholder="例如:張小明")
             new_password = st.text_input("預設密碼", value="2580", type="password", key="new_u_pwd")
-            new_limit = st.number_input("每日解題額度", min_value=1, max_value=99999, value=15, key="new_u_limit")
-
+            new_limit = st.number_input("每日解題額度", min_value=1, max_value=999999, value=15, key="new_u_limit")
             if st.button("新增帳號", use_container_width=True):
                 new_username = new_username.strip()
                 if not new_username:
                     st.error("請輸入使用者帳號!")
                 elif new_username in st.session_state.users_db:
-                    st.error(f"帳號 `{new_username}` 已經存在!")
+                    st.error(f"帳號`{new_username}`已經存在!")
                 else:
                     st.session_state.users_db[new_username] = {
                         "password": new_password,
@@ -1071,7 +1029,7 @@ elif st.session_state.active_tab == "admin":
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.markdown("#### 刪除使用者帳號")
             deletable_users = [
-                u for u, d in st.session_state.users_db.items() 
+                u for u, d in st.session_state.users_db.items()
                 if u != st.session_state.user_name and d.get("role") != "admin"
             ]
             if deletable_users:
@@ -1090,18 +1048,17 @@ elif st.session_state.active_tab == "admin":
         st.markdown("**1. 快速批量統一設定(全體一般使用者)**")
         col_all1, col_all2 = st.columns([3, 1])
         all_limit_val = col_all1.number_input(
-            "設定每日統一解題上限(題)", min_value=1, max_value=99999, value=15, key="all_limit_input"
+            "設定每日統一解題上限(題)", min_value=1, max_value=999999, value=15, key="all_limit_input"
         )
         if col_all2.button("套用至全體", use_container_width=True):
             for u_name, u_data in st.session_state.users_db.items():
                 if u_data.get("role") != "admin":
                     u_data["custom_limit"] = all_limit_val
             save_config_from_session()
-            st.success(f"已將所有一般使用者的每日上限調至 {all_limit_val} 題!")
+            st.success(f"已將所有一般使用者的每日上限調至{all_limit_val}題!")
             st.rerun()
 
         st.divider()
-
         st.markdown("**2. 單一指定帳號獨立調整**")
         selected_user = st.selectbox("選擇要修改的帳號", list(st.session_state.users_db.keys()))
         current_u_limit = int(st.session_state.users_db[selected_user].get("custom_limit", 15))
@@ -1116,7 +1073,7 @@ elif st.session_state.active_tab == "admin":
         if col_single2.button("儲存個別設定", use_container_width=True):
             st.session_state.users_db[selected_user]["custom_limit"] = new_limit
             save_config_from_session()
-            st.success(f"已更新 {selected_user} 的每日額度為 {new_limit} 題!")
+            st.success(f"已更新 {selected_user} 的每日額度為{new_limit}題!")
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1139,7 +1096,7 @@ elif st.session_state.active_tab == "admin":
                 if not new_sub_clean:
                     st.error("請輸入科目名稱!")
                 elif new_sub_clean in st.session_state.subjects:
-                    st.error(f"科目 `{new_sub_clean}` 已經存在!")
+                    st.error(f"科目`{new_sub_clean}`已經存在!")
                 else:
                     st.session_state.subjects.append(new_sub_clean)
                     save_config_from_session()
@@ -1170,7 +1127,7 @@ elif st.session_state.active_tab == "admin":
             user_list = ["全部使用者"] + list(st.session_state.users_db.keys())
             selected_filter_user = filter_col1.selectbox("過濾使用者帳號", user_list)
             search_query = filter_col2.text_input("關鍵字過濾", placeholder="輸入題目內容、答案或觀念關鍵字...")
-
+            
             filtered_logs = all_logs
             if selected_filter_user != "全部使用者":
                 filtered_logs = [l for l in filtered_logs if l.get("user") == selected_filter_user]
@@ -1178,7 +1135,6 @@ elif st.session_state.active_tab == "admin":
                 filtered_logs = [l for l in filtered_logs if search_query.lower() in str(l).lower()]
 
             st.caption(f"符合條件的紀錄共 {len(filtered_logs)} 筆")
-
             table_data = []
             for item in reversed(filtered_logs):
                 fb_status = item.get("admin_feedback", {}).get("status", "pending")
@@ -1187,7 +1143,7 @@ elif st.session_state.active_tab == "admin":
                     status_str = "正確"
                 elif fb_status == "incorrect":
                     status_str = "需加強"
-
+                
                 table_data.append(
                     {
                         "時間": item.get("time", "未知"),
@@ -1207,17 +1163,16 @@ elif st.session_state.active_tab == "admin":
             for idx, log in enumerate(reversed(filtered_logs)):
                 log_id = log.get("id", f"log_{idx}")
                 feedback = log.get("admin_feedback", {"status": "pending", "comment": ""})
+                
                 with st.expander(
                     f"[{log.get('time')}] {log.get('user')} - {log.get('subject')} [{log.get('depth_mode', '標準詳解')}] (AI答案: {log.get('ans')})"
                 ):
-                    st.markdown(
-                        f"**發問使用者:** `{log.get('user')}` | **科目:** `{log.get('subject')}` | **解說深度:** {log.get('depth_mode', '標準詳解')} | **提問時間:** `{log.get('time')}`"
-                    )
+                    st.markdown(f"**發問使用者:** `{log.get('user')}` | **科目:** `{log.get('subject')}` | **解說深度:** {log.get('depth_mode', '標準詳解')} | **提問時間:** `{log.get('time')}`")
                     st.markdown(f"**標註參考答案:** {log.get('ref_answer')}")
                     st.markdown(f"**題目文字描述:**\n{log.get('note')}")
                     st.markdown(f"**AI 答案:** {log.get('ans')}")
                     st.markdown(f"**觀念詳細推導解析:**\n{log.get('reasoning')}")
-
+                    
                     opts = log.get("options_analysis", [])
                     if opts:
                         st.markdown("**選項解析內容:**")
@@ -1256,7 +1211,6 @@ elif st.session_state.active_tab == "admin":
                         index=status_idx,
                         key=f"status_radio_{log_id}",
                     )
-
                     new_comment = c_col2.text_area(
                         "正確回應與觀念再加強補充",
                         value=feedback.get("comment", ""),
@@ -1264,7 +1218,6 @@ elif st.session_state.active_tab == "admin":
                         key=f"comment_text_{log_id}",
                         height=100,
                     )
-
                     if st.button("儲存點評評語", key=f"save_fb_{log_id}"):
                         log["admin_feedback"] = {
                             "status": new_status_choice,
@@ -1279,21 +1232,14 @@ elif st.session_state.active_tab == "admin":
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### AI 模型引擎開關與模型切換")
         col_ai1, col_ai2 = st.columns(2)
-
-        gemini_options = [
-            "gemini-3.1-pro",
-            "gemini-3.6-flash",
-            "gemini-2.5-pro",
-            "gemini-2.5-flash",
-        ]
+        
+        gemini_options = ["gemini-3.1-pro", "gemini-3.6-flash", "gemini-2.5-pro", "gemini-2.5-flash"]
         current_gemini = st.session_state.selected_gemini_model
         gemini_idx = gemini_options.index(current_gemini) if current_gemini in gemini_options else 0
-
+        
         with col_ai1:
             st.markdown("##### Google Gemini")
-            st.session_state.enable_gemini = st.toggle(
-                "啟用 Gemini AI 解題引擎", value=st.session_state.enable_gemini
-            )
+            st.session_state.enable_gemini = st.toggle("啟用 Gemini AI 解題引擎", value=st.session_state.enable_gemini)
             st.session_state.selected_gemini_model = st.selectbox(
                 "Gemini 模型選擇",
                 options=gemini_options,
@@ -1304,12 +1250,10 @@ elif st.session_state.active_tab == "admin":
         openai_options = ["gpt-4o-mini", "gpt-4o", "o3-mini"]
         current_openai = st.session_state.selected_openai_model
         openai_idx = openai_options.index(current_openai) if current_openai in openai_options else 0
-
+        
         with col_ai2:
             st.markdown("##### OpenAI GPT")
-            st.session_state.enable_openai = st.toggle(
-                "啟用 OpenAI 解題引擎", value=st.session_state.enable_openai
-            )
+            st.session_state.enable_openai = st.toggle("啟用 OpenAI 解題引擎", value=st.session_state.enable_openai)
             st.session_state.selected_openai_model = st.selectbox(
                 "OpenAI 模型選擇", options=openai_options, index=openai_idx
             )
