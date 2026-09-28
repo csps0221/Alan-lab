@@ -336,8 +336,6 @@ st.markdown(
 # ====================
 # 2. 自動登入（Local Storage）與資料庫驗證
 # ====================
-
-# 透過 query_params 接收 localStorage 的自動登入參數
 query_params = st.query_params
 if not st.session_state.logged_in and "auto_user" in query_params:
     auto_u = query_params["auto_user"]
@@ -347,7 +345,6 @@ if not st.session_state.logged_in and "auto_user" in query_params:
         st.session_state.user_name = auto_u
         st.session_state.user_role = users[auto_u].get("role", "user")
 
-# JavaScript 處理裝置上記住登入資訊
 js_code = """
 <script>
     function checkAutoLogin() {
@@ -404,7 +401,6 @@ if not st.session_state.logged_in:
                         st.session_state.login_logs.append({"user": user_n, "time": get_taipei_now_str()})
                         save_config_from_session()
                         
-                        # 寫入 localStorage 記住裝置
                         st.components.v1.html(
                             f"<script>localStorage.setItem('alab_user', '{user_n}');</script>",
                             height=0
@@ -438,7 +434,6 @@ if not st.session_state.logged_in:
                             st.session_state.login_logs.append({"user": input_username, "time": get_taipei_now_str()})
                             save_config_from_session()
                             
-                            # 寫入 localStorage 記住裝置
                             st.components.v1.html(
                                 f"<script>localStorage.setItem('alab_user', '{input_username}');</script>",
                                 height=0
@@ -612,7 +607,6 @@ with col_head2:
     if st.button("登出", use_container_width=True, disabled=is_locked):
         st.session_state.logged_in = False
         st.query_params.clear()
-        # 清除 localStorage 登入紀錄
         st.components.v1.html(
             "<script>localStorage.removeItem('alab_user'); window.location.href = window.location.pathname;</script>",
             height=0
@@ -743,6 +737,7 @@ if st.session_state.active_tab == "home":
         elif not uploaded_files and not text_question.strip():
             st.warning("請輸入文字題目或上傳題目圖片！")
         else:
+            # 存入待處理任務資訊，並立即跳轉至「解題解析」頁面
             st.session_state.pending_task = {
                 "text_question": text_question,
                 "uploaded_files": uploaded_files,
@@ -755,7 +750,7 @@ if st.session_state.active_tab == "home":
             st.session_state.active_tab = "analysis"
             st.rerun()
 
-# --- TAB 2: 解題解析 ---
+# --- TAB 2: 解題解析 (獨立解題與呈現頁面) ---
 elif st.session_state.active_tab == "analysis":
     if st.session_state.get("is_processing", False) and "pending_task" in st.session_state:
         st.markdown("### 解題結果")
@@ -793,7 +788,7 @@ elif st.session_state.active_tab == "analysis":
                 unsafe_allow_html=True
             )
             progress_bar.progress(p_val, text=f"解題進度 {p_val}%")
-            time.sleep(0.4)
+            time.sleep(0.3)
             
         with st.spinner("最後確認中..."):
             images_to_process = (
