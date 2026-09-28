@@ -145,6 +145,8 @@ if "theme_color" not in st.session_state:
     st.session_state.theme_color = config.get("theme_color", "graphite_gray")
 if "selected_depth_mode" not in st.session_state:
     st.session_state.selected_depth_mode = "標準詳解"
+if "is_processing" not in st.session_state:
+    st.session_state.is_processing = False
 
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 OPENAI_API_KEY = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
@@ -332,8 +334,35 @@ st.markdown(
 )
 
 # ====================
-# 2. 登入邏輯
+# 2. 自動登入（Local Storage）與資料庫驗證
 # ====================
+
+# 透過 query_params 接收 localStorage 的自動登入參數
+query_params = st.query_params
+if not st.session_state.logged_in and "auto_user" in query_params:
+    auto_u = query_params["auto_user"]
+    users = st.session_state.users_db
+    if auto_u in users:
+        st.session_state.logged_in = True
+        st.session_state.user_name = auto_u
+        st.session_state.user_role = users[auto_u].get("role", "user")
+
+# JavaScript 處理裝置上記住登入資訊
+js_code = """
+<script>
+    function checkAutoLogin() {
+        const storedUser = localStorage.getItem("alab_user");
+        const urlParams = new URLSearchParams(window.location.search);
+        if (storedUser && !urlParams.has("auto_user")) {
+            urlParams.set("auto_user", storedUser);
+            window.location.search = urlParams.toString();
+        }
+    }
+    checkAutoLogin();
+</script>
+"""
+components.html(js_code, height=0)
+
 if not st.session_state.logged_in:
     st.markdown(
         """
@@ -347,56 +376,77 @@ if not st.session_state.logged_in:
         """,
         unsafe_allow_html=True,
     )
+    
     if st.session_state.must_change_pwd:
         with st.container():
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.markdown("### 初次登入 - 請修改密碼")
             st.info("為了您的帳號安全，第一次登入請設定新密碼！")
-            new_pwd = st.text_input("輸入新密碼", type="password", placeholder="請輸入新密碼")
-            confirm_pwd = st.text_input("確認新密碼", type="password", placeholder="請再次輸入新密碼")
             
-            if st.button("確認修改並登入", use_container_width=True):
-                if not new_pwd:
-                    st.error("新密碼不可為空白！")
-                elif new_pwd != confirm_pwd:
-                    st.error("兩次輸入的密碼不一致，請重新確認！")
-                else:
-                    user_n = st.session_state.temp_user
-                    st.session_state.users_db[user_n]["password"] = new_pwd
-                    st.session_state.users_db[user_n]["first_login"] = False
-                    st.session_state.logged_in = True
-                    st.session_state.must_change_pwd = False
-                    st.session_state.user_name = user_n
-                    st.session_state.user_role = st.session_state.users_db[user_n].get("role", "user")
-                    st.session_state.login_logs.append({"user": user_n, "time": get_taipei_now_str()})
-                    save_config_from_session()
-                    st.success("密碼修改成功！正在進入系統...")
-                    st.rerun()
+            with st.form("change_password_form", clear_on_submit=False):
+                new_pwd = st.text_input("輸入新密碼", type="password", placeholder="請輸入新密碼")
+                confirm_pwd = st.text_input("確認新密碼", type="password", placeholder="請再次輸入新密碼")
+                pwd_submit = st.form_submit_button("確認修改並登入", use_container_width=True)
+                
+                if pwd_submit:
+                    if not new_pwd:
+                        st.error("新密碼不可為空白！")
+                    elif new_pwd != confirm_pwd:
+                        st.error("兩次輸入的密碼不一致，請重新確認！")
+                    else:
+                        user_n = st.session_state.temp_user
+                        st.session_state.users_db[user_n]["password"] = new_pwd
+                        st.session_state.users_db[user_n]["first_login"] = False
+                        st.session_state.logged_in = True
+                        st.session_state.must_change_pwd = False
+                        st.session_state.user_name = user_n
+                        st.session_state.user_role = st.session_state.users_db[user_n].get("role", "user")
+                        st.session_state.login_logs.append({"user": user_n, "time": get_taipei_now_str()})
+                        save_config_from_session()
+                        
+                        # 寫入 localStorage 記住裝置
+                        st.components.v1.html(
+                            f"<script>localStorage.setItem('alab_user', '{user_n}');</script>",
+                            height=0
+                        )
+                        st.success("密碼修改成功！正在進入系統...")
+                        st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
             st.stop()
     else:
         with st.container():
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.markdown("### 使用者登入")
-            input_username = st.text_input("帳號", placeholder="請輸入帳號")
-            input_password = st.text_input("密碼", type="password", placeholder="請輸入密碼")
-            if st.button("登入系統", use_container_width=True):
-                users = st.session_state.users_db
-                if input_username in users and users[input_username]["password"] == input_password:
-                    if users[input_username].get("first_login", True):
-                        st.session_state.must_change_pwd = True
-                        st.session_state.temp_user = input_username
-                        st.rerun()
+            
+            with st.form("login_form", clear_on_submit=False):
+                input_username = st.text_input("帳號", placeholder="請輸入帳號")
+                input_password = st.text_input("密碼", type="password", placeholder="請輸入密碼")
+                login_submitted = st.form_submit_button("登入系統", use_container_width=True)
+                
+                if login_submitted:
+                    users = st.session_state.users_db
+                    
+                    if input_username in users and users[input_username]["password"] == input_password:
+                        if users[input_username].get("first_login", True):
+                            st.session_state.must_change_pwd = True
+                            st.session_state.temp_user = input_username
+                            st.rerun()
+                        else:
+                            st.session_state.logged_in = True
+                            st.session_state.user_name = input_username
+                            st.session_state.user_role = users[input_username].get("role", "user")
+                            st.session_state.login_logs.append({"user": input_username, "time": get_taipei_now_str()})
+                            save_config_from_session()
+                            
+                            # 寫入 localStorage 記住裝置
+                            st.components.v1.html(
+                                f"<script>localStorage.setItem('alab_user', '{input_username}');</script>",
+                                height=0
+                            )
+                            st.toast(f"歡迎回來, {input_username}！", icon="👋")
+                            st.rerun()
                     else:
-                        st.session_state.logged_in = True
-                        st.session_state.user_name = input_username
-                        st.session_state.user_role = users[input_username].get("role", "user")
-                        st.session_state.login_logs.append({"user": input_username, "time": get_taipei_now_str()})
-                        save_config_from_session()
-                        st.toast(f"歡迎回來, {input_username}！", icon="👋")
-                        st.rerun()
-                else:
-                    st.error("帳號或密碼錯誤，請重新確認！")
+                        st.error("帳號或密碼錯誤，請重新確認！")
             st.markdown('</div>', unsafe_allow_html=True)
             st.stop()
 
@@ -486,6 +536,8 @@ def call_ai_solver(question_text, subject="通用", depth_mode="標準詳解", r
 # ====================
 # 4. 主介面 Header 與用戶資訊卡片
 # ====================
+is_locked = st.session_state.get("is_processing", False)
+
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
     st.markdown(
@@ -519,6 +571,7 @@ with col_h2:
         }.get(x, "玄霧石墨"),
         index=theme_index,
         label_visibility="collapsed",
+        disabled=is_locked,
     )
     if theme_choice != st.session_state.theme_color:
         st.session_state.theme_color = theme_choice
@@ -556,30 +609,36 @@ with col_head1:
 
 with col_head2:
     st.markdown('<div class="secondary-btn" style="margin-top: 8px;">', unsafe_allow_html=True)
-    if st.button("登出", use_container_width=True):
+    if st.button("登出", use_container_width=True, disabled=is_locked):
         st.session_state.logged_in = False
+        st.query_params.clear()
+        # 清除 localStorage 登入紀錄
+        st.components.v1.html(
+            "<script>localStorage.removeItem('alab_user'); window.location.href = window.location.pathname;</script>",
+            height=0
+        )
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.write("")
 is_admin = st.session_state.get("user_role") == "admin"
 cols = st.columns(4 if is_admin else 3)
-if cols[0].button("首頁", use_container_width=True):
+if cols[0].button("首頁", use_container_width=True, disabled=is_locked):
     st.session_state.active_tab = "home"
     st.rerun()
 
-if cols[1].button("解題解析", use_container_width=True):
-    # 限制：若尚未問問題（且非正在解題中），不開放點擊跳轉
+if cols[1].button("解題解析", use_container_width=True, disabled=is_locked):
     if not st.session_state.get("latest_analysis") and not st.session_state.get("is_processing"):
         st.warning("請先在首頁輸入或上傳題目並點擊「開始解題」！")
     else:
         st.session_state.active_tab = "analysis"
         st.rerun()
 
-if cols[2].button("解題紀錄", use_container_width=True):
+if cols[2].button("解題紀錄", use_container_width=True, disabled=is_locked):
     st.session_state.active_tab = "history"
     st.rerun()
-if is_admin and cols[3].button("後台", use_container_width=True):
+
+if is_admin and cols[3].button("後台", use_container_width=True, disabled=is_locked):
     st.session_state.active_tab = "admin"
     st.rerun()
 
@@ -603,9 +662,10 @@ if st.session_state.active_tab == "home":
         "文字題目描述(可直接貼上題目文字、觀念問題)",
         placeholder="例如:請幫我解釋氧化還原反應中，氧化劑與還原劑的判斷方式...",
         height=120,
+        disabled=is_locked,
     )
     uploaded_files = st.file_uploader(
-        "上傳題目圖片(選填，可1~5張)", type=["png", "jpg", "jpeg"], accept_multiple_files=True
+        "上傳題目圖片(選填，可1~5張)", type=["png", "jpg", "jpeg"], accept_multiple_files=True, disabled=is_locked
     )
     
     cropped_images = []
@@ -632,7 +692,6 @@ if st.session_state.active_tab == "home":
         unsafe_allow_html=True,
     )
 
-    # Segmented Control 深度切換
     st.write("選擇解說深度：")
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     
@@ -641,21 +700,21 @@ if st.session_state.active_tab == "home":
     with btn_col1:
         is_active = (current_depth == "精簡解答")
         btn_type = "primary" if is_active else "secondary"
-        if st.button("⚡ 精簡解答", use_container_width=True, key="depth_btn_1", type=btn_type):
+        if st.button("⚡ 精簡解答", use_container_width=True, key="depth_btn_1", type=btn_type, disabled=is_locked):
             st.session_state.selected_depth_mode = "精簡解答"
             st.rerun()
             
     with btn_col2:
         is_active = (current_depth == "標準詳解")
         btn_type = "primary" if is_active else "secondary"
-        if st.button("📘 標準詳解", use_container_width=True, key="depth_btn_2", type=btn_type):
+        if st.button("📘 標準詳解", use_container_width=True, key="depth_btn_2", type=btn_type, disabled=is_locked):
             st.session_state.selected_depth_mode = "標準詳解"
             st.rerun()
 
     with btn_col3:
         is_active = (current_depth == "深度解析")
         btn_type = "primary" if is_active else "secondary"
-        if st.button("🔬 深度解析", use_container_width=True, key="depth_btn_3", type=btn_type):
+        if st.button("🔬 深度解析", use_container_width=True, key="depth_btn_3", type=btn_type, disabled=is_locked):
             st.session_state.selected_depth_mode = "深度解析"
             st.rerun()
 
@@ -668,14 +727,14 @@ if st.session_state.active_tab == "home":
     }
     st.caption(f"💡 目前選擇：**{depth_hints[depth_mode]}**")
 
-    selected_subject = st.selectbox("選擇題目科目", st.session_state.subjects, index=0)
-    ref_answer = st.text_input("標準參考答案(選填)", placeholder="例如B、ACD、2.5 mol...")
+    selected_subject = st.selectbox("選擇題目科目", st.session_state.subjects, index=0, disabled=is_locked)
+    ref_answer = st.text_input("標準參考答案(選填)", placeholder="例如B、ACD、2.5 mol...", disabled=is_locked)
 
     col_b1, col_b2 = st.columns([3, 1])
-    submit_btn = col_b1.button("開始解題", use_container_width=True)
+    submit_btn = col_b1.button("開始解題", use_container_width=True, disabled=is_locked)
     with col_b2:
         st.markdown('<div class="secondary-btn">', unsafe_allow_html=True)
-        clear_btn = st.button("清除", use_container_width=True)
+        clear_btn = st.button("清除", use_container_width=True, disabled=is_locked)
         st.markdown('</div>', unsafe_allow_html=True)
 
     if submit_btn:
@@ -684,7 +743,6 @@ if st.session_state.active_tab == "home":
         elif not uploaded_files and not text_question.strip():
             st.warning("請輸入文字題目或上傳題目圖片！")
         else:
-            # 準備解題暫存資料並直接跳轉至解題解析頁面
             st.session_state.pending_task = {
                 "text_question": text_question,
                 "uploaded_files": uploaded_files,
@@ -699,12 +757,10 @@ if st.session_state.active_tab == "home":
 
 # --- TAB 2: 解題解析 ---
 elif st.session_state.active_tab == "analysis":
-    # 檢查是否為剛按下解題鍵的「正在分析中」狀態
     if st.session_state.get("is_processing", False) and "pending_task" in st.session_state:
         st.markdown("### 解題結果")
         st.caption("答題 → 觀念拆解 → 選項解析 → 追問")
         
-        # 顯示類似影片中的動畫分析卡片面板
         status_card = st.empty()
         progress_bar = st.empty()
         
@@ -716,7 +772,6 @@ elif st.session_state.active_tab == "analysis":
         cropped_images = task["cropped_images"]
         ref_answer = task["ref_answer"]
         
-        # 多階段擬真進度動畫
         progress_steps = [
             (15, "正在啟動AI解題引擎..."),
             (35, "正在辨識題目內容與選項..."),
@@ -740,7 +795,6 @@ elif st.session_state.active_tab == "analysis":
             progress_bar.progress(p_val, text=f"解題進度 {p_val}%")
             time.sleep(0.4)
             
-        # 執行實際 AI 呼叫
         with st.spinner("最後確認中..."):
             images_to_process = (
                 cropped_images
@@ -786,12 +840,10 @@ elif st.session_state.active_tab == "analysis":
             user_info["used_today"] += 1
             save_config_from_session()
             
-            # 清除暫存狀態
             st.session_state.is_processing = False
             del st.session_state.pending_task
             st.rerun()
 
-    # 展示解題完成後的詳細結果
     elif "latest_analysis" in st.session_state and st.session_state.latest_analysis:
         st.markdown("### 解題解析")
         st.caption("答案 → 觀念拆解 → 選項解析 → 追問")
