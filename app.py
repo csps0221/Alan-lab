@@ -435,7 +435,7 @@ if not st.session_state.logged_in:
         st.stop()
 
 # ====================
-# 3. AI 核心邏輯
+# 3. AI 核心邏輯 (含自動降級防爆)
 # ====================
 def build_system_prompt(subject: str = "通用", depth_mode: str = "標準詳解"):
     depth_instructions = {
@@ -474,52 +474,65 @@ def extract_text_from_images(image_list: list, extra_info: str = "", subject: st
     except Exception as e:
         return f"[圖片辨識說明]: {str(e)}"
 
-def call_ai_solver(question_text, subject="通用", depth_mode="標準詳解", retries=2):
-    if not st.session_state.enable_gemini and not st.session_state.enable_openai:
-        return "服務已關閉", "管理員目前已關閉所有AI解題服務系統。", []
-    if not GEMINI_API_KEY and not OPENAI_API_KEY:
-        return "未設定 API Key", "請在 secrets.toml 中設定 API Key。", []
+def execute_ai_request(question_text, subject, depth_mode, model_name=None):
+    """內部單次呼叫 AI 的函式"""
+    if not model_name:
+        model_name = st.session_state.selected_gemini_model
 
     sys_prompt = build_system_prompt(subject, depth_mode)
     prompt = f"{sys_prompt}\n\n【{subject}】題目需求與描述:\n{question_text}"
 
-    for attempt in range(retries + 1):
+    # 1. Gemini 嘗試
+    if GEMINI_API_KEY and st.session_state.enable_gemini:
         try:
-            if GEMINI_API_KEY and st.session_state.enable_gemini:
-                client = genai.Client(api_key=GEMINI_API_KEY)
-                resp = client.models.generate_content(
-                    model=st.session_state.selected_gemini_model,
-                    contents=prompt
-                )
-                raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
-                data = json.loads(raw)
-                return data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            resp = client.models.generate_content(model=model_name, contents=prompt)
+            raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
+            data = json.loads(raw)
+            return True, data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
+        except Exception:
+            pass
 
-            if OPENAI_API_KEY and st.session_state.enable_openai:
-                client = OpenAI(api_key=OPENAI_API_KEY)
-                resp = client.chat.completions.create(
-                    model=st.session_state.selected_openai_model,
-                    response_format={"type": "json_object"},
-                    messages=[
-                        {"role": "system", "content": sys_prompt},
-                        {"role": "user", "content": f"【{subject}】題目需求與描述:\n{question_text}"}
-                    ]
-                )
-                data = json.loads(resp.choices[0].message.content)
-                return data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
+    # 2. OpenAI 備援嘗試
+    if OPENAI_API_KEY and st.session_state.enable_openai:
+        try:
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            resp = client.chat.completions.create(
+                model=st.session_state.selected_openai_model,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": f"【{subject}】題目需求與描述:\n{question_text}"}
+                ]
+            )
+            data = json.loads(resp.choices[0].message.content)
+            return True, data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
+        except Exception:
+            pass
 
-        except json.JSONDecodeError:
-            if attempt < retries:
-                time.sleep(1)
-                continue
-            return "解析格式錯誤", "AI回傳格式不符 JSON規範，請重試一次。", []
-        except Exception as e:
-            if attempt < retries:
-                time.sleep(1)
-                continue
-            return "解析失敗", f"呼叫AI時發生錯誤: {str(e)}", []
+    return False, "解析失敗", "AI 伺服器繁忙中，請稍後重試。", []
 
-    return "解析失敗", "無法存取AI模型或相關服務連線逾時。", []
+def call_ai_solver(question_text, subject="通用", depth_mode="標準詳解"):
+    """主要解題進入點：若深度解析失敗，自動切換至一般模式"""
+    if not st.session_state.enable_gemini and not st.session_state.enable_openai:
+        return "服務已關閉", "管理員目前已關閉所有AI解題服務系統。", [], depth_mode
+
+    # 第一步：嘗試使用者指定的模式（例如：深度解析）
+    success, ans, reasoning, options = execute_ai_request(question_text, subject, depth_mode)
+    if success:
+        return ans, reasoning, options, depth_mode
+
+    # 第二步：若指定為「深度解析」且失敗了（例如 503 過載），自動降級改用「一般模式（標準詳解）」搶先解題
+    if depth_mode == "深度解析":
+        success_std, ans_std, reasoning_std, options_std = execute_ai_request(
+            question_text, subject, "標準詳解", model_name="gemini-2.5-flash"
+        )
+        if success_std:
+            notice = "⚠️ **【系統提示】** 由於「深度解析」AI 伺服器流量較高，已先自動為您採用 **一般模式（標準詳解）** 完成解題！您可以在下方點擊按鈕重新嘗試深度解析。\n\n"
+            return ans_std, notice + reasoning_std, options_std, "標準詳解（降級）"
+
+    # 若連一般模式都失敗
+    return "解析失敗", "AI 系統繁忙中，請稍後再試一次。", [], depth_mode
 
 # ====================
 # 4. 獨立解題執行頁面 (當 is_processing = True 時全螢幕獨立顯示)
@@ -583,7 +596,7 @@ if st.session_state.get("is_processing", False) and "pending_task" in st.session
     if ocr_text:
         combined_question += f"圖片題目辨識內容:\n{ocr_text}"
 
-    ans, reasoning, options_analysis = call_ai_solver(
+    ans, reasoning, options_analysis, actual_depth = call_ai_solver(
         combined_question, subject=selected_subject, depth_mode=depth_mode
     )
     images_b64 = [compress_and_to_b64(img) for img in images_to_process]
@@ -593,7 +606,8 @@ if st.session_state.get("is_processing", False) and "pending_task" in st.session
         "user": user_name,
         "time": get_taipei_now_str(),
         "subject": selected_subject,
-        "depth_mode": depth_mode,
+        "depth_mode": actual_depth,
+        "original_requested_depth": depth_mode,
         "ref_answer": ref_answer or "無",
         "note": text_question or "無",
         "ans": ans,
@@ -617,7 +631,7 @@ if st.session_state.get("is_processing", False) and "pending_task" in st.session
     st.rerun()
 
 # ====================
-# 5. 一般介面 Header 與用戶資訊卡片 (解題時自動隱藏)
+# 5. 一般介面 Header 與用戶資訊卡片
 # ====================
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
@@ -627,7 +641,7 @@ with col_h1:
             <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 24px;">🧪</span>
                 <div>
-                    <div class="header-title">A.lab | 解題實驗室 2.0.6</div>
+                    <div class="header-title">A.lab | 解題實驗室 2.0.7</div>
                     <div class="header-sub">Science Lab Platform</div>
                 </div>
             </div>
@@ -898,6 +912,21 @@ elif st.session_state.active_tab == "analysis":
                 """,
                 unsafe_allow_html=True,
             )
+
+        # 若原本要求深度解析但被自動降級，提供重新發起深度解析按鈕
+        if res.get("original_requested_depth") == "深度解析" and "降級" in res.get("depth_mode", ""):
+            if st.button("⚡ 重新嘗試加載「深度解析」", use_container_width=True, type="primary"):
+                st.toast("正在重新發起深度解析運算...")
+                st.session_state.pending_task = {
+                    "text_question": res.get("note", ""),
+                    "uploaded_files": [],
+                    "cropped_images": [],
+                    "selected_subject": res.get("subject", "通用"),
+                    "depth_mode": "深度解析",
+                    "ref_answer": res.get("ref_answer", "")
+                }
+                st.session_state.is_processing = True
+                st.rerun()
 
         st.write("")
         if st.button("重試原題", use_container_width=True):
