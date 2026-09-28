@@ -567,9 +567,15 @@ cols = st.columns(4 if is_admin else 3)
 if cols[0].button("首頁", use_container_width=True):
     st.session_state.active_tab = "home"
     st.rerun()
+
 if cols[1].button("解題解析", use_container_width=True):
-    st.session_state.active_tab = "analysis"
-    st.rerun()
+    # 限制：若尚未問問題（且非正在解題中），不開放點擊跳轉
+    if not st.session_state.get("latest_analysis") and not st.session_state.get("is_processing"):
+        st.warning("請先在首頁輸入或上傳題目並點擊「開始解題」！")
+    else:
+        st.session_state.active_tab = "analysis"
+        st.rerun()
+
 if cols[2].button("解題紀錄", use_container_width=True):
     st.session_state.active_tab = "history"
     st.rerun()
@@ -626,15 +632,9 @@ if st.session_state.active_tab == "home":
         unsafe_allow_html=True,
     )
 
-    # 改為按鈕（Segmented Buttons）互動方式切換解說深度
+    # Segmented Control 深度切換
     st.write("選擇解說深度：")
     btn_col1, btn_col2, btn_col3 = st.columns(3)
-    
-    depth_modes = [
-        ("精簡解答", "⚡ 掌握核心觀念與簡潔步驟"),
-        ("標準詳解", "📘 完整步驟與觀念推導"),
-        ("深度解析", "🔬 包含引申觀念與易錯點剖析")
-    ]
     
     current_depth = st.session_state.get("selected_depth_mode", "標準詳解")
     
@@ -661,7 +661,6 @@ if st.session_state.active_tab == "home":
 
     depth_mode = st.session_state.selected_depth_mode
     
-    # 顯示目前選取模式的說明提示框
     depth_hints = {
         "精簡解答": "【精簡解答】掌握核心觀念與簡潔步驟",
         "標準詳解": "【標準詳解】完整步驟與觀念推導",
@@ -685,60 +684,118 @@ if st.session_state.active_tab == "home":
         elif not uploaded_files and not text_question.strip():
             st.warning("請輸入文字題目或上傳題目圖片！")
         else:
-            with st.spinner(f"A.lab AI 正在以【{depth_mode}】模式針對【{selected_subject}】進行分析中..."):
-                images_to_process = (
-                    cropped_images
-                    if cropped_images
-                    else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
-                )
-                ocr_text = (
-                    extract_text_from_images(images_to_process, text_question, subject=selected_subject)
-                    if images_to_process
-                    else ""
-                )
-                
-                combined_question = ""
-                if text_question.strip():
-                    combined_question += f"使用者文字題目/補充:\n{text_question.strip()}\n\n"
-                if ocr_text:
-                    combined_question += f"圖片題目辨識內容:\n{ocr_text}"
-
-                ans, reasoning, options_analysis = call_ai_solver(
-                    combined_question, subject=selected_subject, depth_mode=depth_mode
-                )
-                
-                images_b64 = [compress_and_to_b64(img) for img in images_to_process]
-                new_record = {
-                    "id": str(time.time()),
-                    "user": user_name,
-                    "time": get_taipei_now_str(),
-                    "subject": selected_subject,
-                    "depth_mode": depth_mode,
-                    "ref_answer": ref_answer or "無",
-                    "note": text_question or "無",
-                    "ans": ans,
-                    "reasoning": reasoning,
-                    "options_analysis": options_analysis,
-                    "images_b64": images_b64,
-                    "admin_feedback": {
-                        "status": "pending",
-                        "comment": "",
-                    },
-                }
-                st.session_state.history_logs.append(new_record)
-                st.session_state.latest_analysis = new_record
-                user_info["used_today"] += 1
-                save_config_from_session()
-                st.toast("解題完成！", icon="🎉")
-                st.session_state.active_tab = "analysis"
-                st.rerun()
+            # 準備解題暫存資料並直接跳轉至解題解析頁面
+            st.session_state.pending_task = {
+                "text_question": text_question,
+                "uploaded_files": uploaded_files,
+                "cropped_images": cropped_images,
+                "selected_subject": selected_subject,
+                "depth_mode": depth_mode,
+                "ref_answer": ref_answer
+            }
+            st.session_state.is_processing = True
+            st.session_state.active_tab = "analysis"
+            st.rerun()
 
 # --- TAB 2: 解題解析 ---
 elif st.session_state.active_tab == "analysis":
-    st.markdown("### 解題解析")
-    st.caption("答案 → 觀念詳解 → 選項解析 → 追問")
-    
-    if "latest_analysis" in st.session_state and st.session_state.latest_analysis:
+    # 檢查是否為剛按下解題鍵的「正在分析中」狀態
+    if st.session_state.get("is_processing", False) and "pending_task" in st.session_state:
+        st.markdown("### 解題結果")
+        st.caption("答題 → 觀念拆解 → 選項解析 → 追問")
+        
+        # 顯示類似影片中的動畫分析卡片面板
+        status_card = st.empty()
+        progress_bar = st.empty()
+        
+        task = st.session_state.pending_task
+        selected_subject = task["selected_subject"]
+        depth_mode = task["depth_mode"]
+        text_question = task["text_question"]
+        uploaded_files = task["uploaded_files"]
+        cropped_images = task["cropped_images"]
+        ref_answer = task["ref_answer"]
+        
+        # 多階段擬真進度動畫
+        progress_steps = [
+            (15, "正在啟動AI解題引擎..."),
+            (35, "正在辨識題目內容與選項..."),
+            (60, f"正在進行【{selected_subject}】觀念推導..."),
+            (85, "正在生成選項分析與步驟說明..."),
+            (95, "正在整理最終答題報告...")
+        ]
+        
+        for p_val, msg in progress_steps:
+            status_card.markdown(
+                f"""
+                <div class="custom-card" style="text-align: center; padding: 30px 20px;">
+                    <div style="font-size: 18px; font-weight: bold; color: #FFFFFF; margin-bottom: 12px;">
+                        已送出題目，分析題目中
+                    </div>
+                    <div style="font-size: 13px; color: #94A3B8; margin-bottom: 20px;">{msg}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            progress_bar.progress(p_val, text=f"解題進度 {p_val}%")
+            time.sleep(0.4)
+            
+        # 執行實際 AI 呼叫
+        with st.spinner("最後確認中..."):
+            images_to_process = (
+                cropped_images
+                if cropped_images
+                else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
+            )
+            ocr_text = (
+                extract_text_from_images(images_to_process, text_question, subject=selected_subject)
+                if images_to_process
+                else ""
+            )
+            
+            combined_question = ""
+            if text_question.strip():
+                combined_question += f"使用者文字題目/補充:\n{text_question.strip()}\n\n"
+            if ocr_text:
+                combined_question += f"圖片題目辨識內容:\n{ocr_text}"
+
+            ans, reasoning, options_analysis = call_ai_solver(
+                combined_question, subject=selected_subject, depth_mode=depth_mode
+            )
+            
+            images_b64 = [compress_and_to_b64(img) for img in images_to_process]
+            new_record = {
+                "id": str(time.time()),
+                "user": user_name,
+                "time": get_taipei_now_str(),
+                "subject": selected_subject,
+                "depth_mode": depth_mode,
+                "ref_answer": ref_answer or "無",
+                "note": text_question or "無",
+                "ans": ans,
+                "reasoning": reasoning,
+                "options_analysis": options_analysis,
+                "images_b64": images_b64,
+                "admin_feedback": {
+                    "status": "pending",
+                    "comment": "",
+                },
+            }
+            st.session_state.history_logs.append(new_record)
+            st.session_state.latest_analysis = new_record
+            user_info["used_today"] += 1
+            save_config_from_session()
+            
+            # 清除暫存狀態
+            st.session_state.is_processing = False
+            del st.session_state.pending_task
+            st.rerun()
+
+    # 展示解題完成後的詳細結果
+    elif "latest_analysis" in st.session_state and st.session_state.latest_analysis:
+        st.markdown("### 解題解析")
+        st.caption("答案 → 觀念拆解 → 選項解析 → 追問")
+        
         res = st.session_state.latest_analysis
         feedback = res.get("admin_feedback", {})
         status = feedback.get("status", "pending")
@@ -917,13 +974,13 @@ elif st.session_state.active_tab == "admin":
         ["使用者與權限", "科目管理", "解題點評與歷史紀錄", "AI 模型設定", "Bug回報"]
     )
     
-    # 1. 使用者管理 (已過濾掉管理員，不顯示管理員帳號)
+    # 1. 使用者管理
     with admin_tab1:
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.markdown("#### 帳號總覽與狀態")
         user_rows = []
         for uname, udata in st.session_state.users_db.items():
-            if udata.get("role") != "admin":  # 過濾掉管理員帳號
+            if udata.get("role") != "admin":
                 user_rows.append(
                     {
                         "帳號": uname,
