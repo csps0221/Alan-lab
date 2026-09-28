@@ -524,7 +524,7 @@ def call_ai_solver(question_text, subject="通用", depth_mode="標準詳解", r
 # ====================
 # 4. 主介面 Header 與用戶資訊卡片
 # ====================
-# 全域鎖定控制變數
+# 全域鎖定控制變數：當 is_processing 為 True 時，全站按鈕與輸入欄位全面停用
 is_locked = st.session_state.get("is_processing", False)
 
 col_h1, col_h2 = st.columns([3, 1])
@@ -893,13 +893,13 @@ elif st.session_state.active_tab == "analysis":
             )
 
         st.write("")
-        if st.button("重試原題", use_container_width=True):
+        if st.button("重試原題", use_container_width=True, disabled=is_locked):
             st.toast("已為您重新開啟試題進行重試！")
             st.session_state.active_tab = "home"
             st.rerun()
 
         st.markdown('<div class="secondary-btn">', unsafe_allow_html=True)
-        if st.button("回到解題主頁", use_container_width=True):
+        if st.button("回到解題主頁", use_container_width=True, disabled=is_locked):
             st.session_state.active_tab = "home"
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -909,7 +909,7 @@ elif st.session_state.active_tab == "analysis":
 # --- TAB 3: 我的解題紀錄 ---
 elif st.session_state.active_tab == "history":
     st.markdown("### 我的解題紀錄")
-    search_kw = st.text_input("搜尋關鍵字", placeholder="搜尋答案、題目文字、解析內容...", label_visibility="collapsed")
+    search_kw = st.text_input("搜尋關鍵字", placeholder="搜尋答案、題目文字、解析內容...", label_visibility="collapsed", disabled=is_locked)
     logs = [l for l in st.session_state.history_logs if l.get("user") == user_name or is_admin]
     
     if search_kw:
@@ -958,7 +958,7 @@ elif st.session_state.active_tab == "history":
 elif st.session_state.active_tab == "admin":
     if not is_admin:
         st.error("存取被拒絕: 您沒有進入後台管理系統的權限！")
-        if st.button("返回首頁"):
+        if st.button("返回首頁", disabled=is_locked):
             st.session_state.active_tab = "home"
             st.rerun()
         st.stop()
@@ -1013,10 +1013,10 @@ elif st.session_state.active_tab == "admin":
         with col_add:
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.markdown("#### 新增使用者帳號")
-            new_username = st.text_input("輸入新使用者帳號", key="new_u_name", placeholder="例如:張小明")
-            new_password = st.text_input("預設密碼", value="2580", type="password", key="new_u_pwd")
-            new_limit = st.number_input("每日解題額度", min_value=1, max_value=999999, value=15, key="new_u_limit")
-            if st.button("新增帳號", use_container_width=True):
+            new_username = st.text_input("輸入新使用者帳號", key="new_u_name", placeholder="例如:張小明", disabled=is_locked)
+            new_password = st.text_input("預設密碼", value="2580", type="password", key="new_u_pwd", disabled=is_locked)
+            new_limit = st.number_input("每日解題額度", min_value=1, max_value=999999, value=15, key="new_u_limit", disabled=is_locked)
+            if st.button("新增帳號", use_container_width=True, disabled=is_locked):
                 new_username = new_username.strip()
                 if not new_username:
                     st.error("請輸入使用者帳號！")
@@ -1042,8 +1042,8 @@ elif st.session_state.active_tab == "admin":
             st.markdown("#### 刪除使用者帳號")
             deletable_users = [u for u, d in st.session_state.users_db.items() if u != st.session_state.user_name and d.get("role") != "admin"]
             if deletable_users:
-                user_to_delete = st.selectbox("選擇要刪除的使用者帳號", deletable_users)
-                if st.button("確定刪除帳號", use_container_width=True):
+                user_to_delete = st.selectbox("選擇要刪除的使用者帳號", deletable_users, disabled=is_locked)
+                if st.button("確定刪除帳號", use_container_width=True, disabled=is_locked):
                     del st.session_state.users_db[user_to_delete]
                     save_config_from_session()
                     st.warning(f"已成功刪除使用者帳號: {user_to_delete}")
@@ -1056,8 +1056,8 @@ elif st.session_state.active_tab == "admin":
         st.markdown("#### 解題額度調整機制")
         st.markdown("**1. 快速批量統一設定 (全體一般使用者)**")
         col_all1, col_all2 = st.columns([3, 1])
-        all_limit_val = col_all1.number_input("設定每日統一解題上限(題)", min_value=1, max_value=999999, value=15, key="all_limit_input")
-        if col_all2.button("套用至全體", use_container_width=True):
+        all_limit_val = col_all1.number_input("設定每日統一解題上限(題)", min_value=1, max_value=999999, value=15, key="all_limit_input", disabled=is_locked)
+        if col_all2.button("套用至全體", use_container_width=True, disabled=is_locked):
             for u_name, u_data in st.session_state.users_db.items():
                 if u_data.get("role") != "admin":
                     u_data["custom_limit"] = all_limit_val
@@ -1067,11 +1067,11 @@ elif st.session_state.active_tab == "admin":
 
         st.divider()
         st.markdown("**2. 單一指定帳號獨立調整**")
-        selected_user = st.selectbox("選擇要修改的帳號", list(st.session_state.users_db.keys()))
+        selected_user = st.selectbox("選擇要修改的帳號", list(st.session_state.users_db.keys()), disabled=is_locked)
         current_u_limit = int(st.session_state.users_db[selected_user].get("custom_limit", 15))
         col_single1, col_single2 = st.columns([3, 1])
-        new_limit_val = col_single1.number_input(f"設定 {selected_user} 的每日解題額度", min_value=1, max_value=99999, value=current_u_limit, key="custom_limit_input")
-        if col_single2.button("儲存個別設定", use_container_width=True):
+        new_limit_val = col_single1.number_input(f"設定 {selected_user} 的每日解題額度", min_value=1, max_value=99999, value=current_u_limit, key="custom_limit_input", disabled=is_locked)
+        if col_single2.button("儲存個別設定", use_container_width=True, disabled=is_locked):
             st.session_state.users_db[selected_user]["custom_limit"] = new_limit_val
             save_config_from_session()
             st.success(f"已更新 {selected_user} 的每日額度為 {new_limit_val} 題！")
@@ -1091,8 +1091,8 @@ elif st.session_state.active_tab == "admin":
         col_sub_add, col_sub_del = st.columns(2)
         with col_sub_add:
             st.markdown("##### 新增科目")
-            new_subject_name = st.text_input("輸入新科目名稱", placeholder="例如:物理、歷史、英文...", key="new_sub_input")
-            if st.button("新增科目", use_container_width=True):
+            new_subject_name = st.text_input("輸入新科目名稱", placeholder="例如:物理、歷史、英文...", key="new_sub_input", disabled=is_locked)
+            if st.button("新增科目", use_container_width=True, disabled=is_locked):
                 new_sub_clean = new_subject_name.strip()
                 if not new_sub_clean:
                     st.error("請輸入科目名稱！")
@@ -1107,8 +1107,8 @@ elif st.session_state.active_tab == "admin":
         with col_sub_del:
             st.markdown("##### 刪除科目")
             if len(st.session_state.subjects) > 1:
-                del_subject_target = st.selectbox("選擇要刪除的科目", st.session_state.subjects, key="del_sub_select")
-                if st.button("確定刪除科目", use_container_width=True):
+                del_subject_target = st.selectbox("選擇要刪除的科目", st.session_state.subjects, key="del_sub_select", disabled=is_locked)
+                if st.button("確定刪除科目", use_container_width=True, disabled=is_locked):
                     st.session_state.subjects.remove(del_subject_target)
                     save_config_from_session()
                     st.warning(f"已成功刪除科目: {del_subject_target}")
@@ -1126,8 +1126,8 @@ elif st.session_state.active_tab == "admin":
         else:
             filter_col1, filter_col2 = st.columns([1, 2])
             user_list = ["全部使用者"] + list(st.session_state.users_db.keys())
-            selected_filter_user = filter_col1.selectbox("過濾使用者帳號", user_list)
-            search_query = filter_col2.text_input("關鍵字過濾", placeholder="輸入題目內容、答案或觀念關鍵字...")
+            selected_filter_user = filter_col1.selectbox("過濾使用者帳號", user_list, disabled=is_locked)
+            search_query = filter_col2.text_input("關鍵字過濾", placeholder="輸入題目內容、答案或觀念關鍵字...", disabled=is_locked)
 
             filtered_logs = all_logs
             if selected_filter_user != "全部使用者":
@@ -1208,6 +1208,7 @@ elif st.session_state.active_tab == "admin":
                         }[x],
                         index=status_idx,
                         key=f"status_radio_{log_id}",
+                        disabled=is_locked,
                     )
                     new_comment = c_col2.text_area(
                         "正確回應與觀念再加強補充",
@@ -1215,8 +1216,9 @@ elif st.session_state.active_tab == "admin":
                         placeholder="請輸入給使用者的觀念補充、錯誤更正或學習建議...",
                         key=f"comment_text_{log_id}",
                         height=100,
+                        disabled=is_locked,
                     )
-                    if st.button("儲存點評評語", key=f"save_fb_{log_id}"):
+                    if st.button("儲存點評評語", key=f"save_fb_{log_id}", disabled=is_locked):
                         log["admin_feedback"] = {
                             "status": new_status_choice,
                             "comment": new_comment,
@@ -1237,12 +1239,13 @@ elif st.session_state.active_tab == "admin":
 
         with col_ai1:
             st.markdown("##### Google Gemini")
-            st.session_state.enable_gemini = st.toggle("啟用 Gemini AI 解題引擎", value=st.session_state.enable_gemini)
+            st.session_state.enable_gemini = st.toggle("啟用 Gemini AI 解題引擎", value=st.session_state.enable_gemini, disabled=is_locked)
             st.session_state.selected_gemini_model = st.selectbox(
                 "Gemini 模型選擇",
                 options=gemini_options,
                 index=gemini_idx,
                 help="Gemini 3.1 Pro 擁有極佳的複雜邏輯推導與解題能力",
+                disabled=is_locked,
             )
 
         openai_options = ["gpt-4o-mini", "gpt-4o", "o3-mini"]
@@ -1251,13 +1254,13 @@ elif st.session_state.active_tab == "admin":
 
         with col_ai2:
             st.markdown("##### OpenAI GPT")
-            st.session_state.enable_openai = st.toggle("啟用 OpenAI 解題引擎", value=st.session_state.enable_openai)
+            st.session_state.enable_openai = st.toggle("啟用 OpenAI 解題引擎", value=st.session_state.enable_openai, disabled=is_locked)
             st.session_state.selected_openai_model = st.selectbox(
-                "OpenAI 模型選擇", options=openai_options, index=openai_idx
+                "OpenAI 模型選擇", options=openai_options, index=openai_idx, disabled=is_locked
             )
 
         st.write("")
-        if st.button("儲存 AI 模型設定", use_container_width=True):
+        if st.button("儲存 AI 模型設定", use_container_width=True, disabled=is_locked):
             save_config_from_session()
             st.success("已成功儲存 AI 模型設定與服務狀態！")
         st.markdown('</div>', unsafe_allow_html=True)
