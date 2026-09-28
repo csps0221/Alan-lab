@@ -522,11 +522,103 @@ def call_ai_solver(question_text, subject="通用", depth_mode="標準詳解", r
     return "解析失敗", "無法存取AI模型或相關服務連線逾時。", []
 
 # ====================
-# 4. 主介面 Header 與用戶資訊卡片
+# 4. 獨立解題執行頁面 (當 is_processing = True 時全螢幕獨立顯示)
 # ====================
-# 全域鎖定控制變數：當 is_processing 為 True 時，全站按鈕與輸入欄位全面停用
-is_locked = st.session_state.get("is_processing", False)
+if st.session_state.get("is_processing", False) and "pending_task" in st.session_state:
+    user_name = st.session_state.user_name
+    user_info = st.session_state.users_db.get(user_name, {})
+    
+    st.markdown(
+        """
+        <div style="text-align: center; padding: 40px 10px;">
+            <div style="font-size: 50px; margin-bottom: 10px;">🧪</div>
+            <div style="font-size: 24px; font-weight: bold; color: #FFFFFF;">A.lab AI 正在極速解題中...</div>
+            <div style="font-size: 13px; color: #94A3B8; margin-top: 6px;">為確保運算穩定，全站所有功能鍵已暫時關閉</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    status_card = st.empty()
+    progress_bar = st.empty()
 
+    task = st.session_state.pending_task
+    selected_subject = task["selected_subject"]
+    depth_mode = task["depth_mode"]
+    text_question = task["text_question"]
+    uploaded_files = task["uploaded_files"]
+    cropped_images = task["cropped_images"]
+    ref_answer = task["ref_answer"]
+
+    progress_steps = [
+        (15, "正在啟動 AI 解題引擎..."),
+        (35, "正在進行題目影像與文字 OCR 轉錄..."),
+        (60, f"正在進行【{selected_subject}】學科觀念推導..."),
+        (85, "正在生成選項邏輯分析與解答對照..."),
+        (95, "正在將解析資料整理並存入系統紀錄...")
+    ]
+
+    for p_val, msg in progress_steps:
+        status_card.markdown(
+            f"""
+            <div class="custom-card" style="text-align: center; padding: 24px 16px;">
+                <div style="font-size: 16px; font-weight: bold; color: {current_theme['highlight']}; margin-bottom: 8px;">
+                    {msg}
+                </div>
+                <div style="font-size: 12px; color: #94A3B8;">請稍後，系統運算完畢後將自動跳轉至解析畫面</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        progress_bar.progress(p_val, text=f"解題進度 {p_val}%")
+        time.sleep(0.3)
+
+    # 執行 AI 解題邏輯
+    images_to_process = cropped_images if cropped_images else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
+    ocr_text = extract_text_from_images(images_to_process, text_question, subject=selected_subject) if images_to_process else ""
+    
+    combined_question = ""
+    if text_question.strip():
+        combined_question += f"使用者文字題目/補充:\n{text_question.strip()}\n\n"
+    if ocr_text:
+        combined_question += f"圖片題目辨識內容:\n{ocr_text}"
+
+    ans, reasoning, options_analysis = call_ai_solver(
+        combined_question, subject=selected_subject, depth_mode=depth_mode
+    )
+    images_b64 = [compress_and_to_b64(img) for img in images_to_process]
+
+    new_record = {
+        "id": str(time.time()),
+        "user": user_name,
+        "time": get_taipei_now_str(),
+        "subject": selected_subject,
+        "depth_mode": depth_mode,
+        "ref_answer": ref_answer or "無",
+        "note": text_question or "無",
+        "ans": ans,
+        "reasoning": reasoning,
+        "options_analysis": options_analysis,
+        "images_b64": images_b64,
+        "admin_feedback": {
+            "status": "pending",
+            "comment": ""
+        },
+    }
+    st.session_state.history_logs.append(new_record)
+    st.session_state.latest_analysis = new_record
+    user_info["used_today"] = user_info.get("used_today", 0) + 1
+    save_config_from_session()
+    
+    # 完成後切換狀態並自動刷新跳轉至解析頁面
+    st.session_state.is_processing = False
+    st.session_state.active_tab = "analysis"
+    del st.session_state.pending_task
+    st.rerun()
+
+# ====================
+# 5. 一般介面 Header 與用戶資訊卡片 (解題時自動隱藏)
+# ====================
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
     st.markdown(
@@ -535,7 +627,7 @@ with col_h1:
             <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 24px;">🧪</span>
                 <div>
-                    <div class="header-title">A.lab | 解題實驗室 2.0.5</div>
+                    <div class="header-title">A.lab | 解題實驗室 2.0.6</div>
                     <div class="header-sub">Science Lab Platform</div>
                 </div>
             </div>
@@ -558,8 +650,7 @@ with col_h2:
             "graphite_gray": "玄霧石墨",
         }.get(x, "玄霧石墨"),
         index=theme_index,
-        label_visibility="collapsed",
-        disabled=is_locked,
+        label_visibility="collapsed"
     )
     if theme_choice != st.session_state.theme_color:
         st.session_state.theme_color = theme_choice
@@ -596,7 +687,7 @@ with col_head1:
     )
 with col_head2:
     st.markdown('<div class="secondary-btn" style="margin-top: 8px;">', unsafe_allow_html=True)
-    if st.button("登出", use_container_width=True, disabled=is_locked):
+    if st.button("登出", use_container_width=True):
         st.session_state.logged_in = False
         st.query_params.clear()
         components.html("<script>localStorage.removeItem('alab_user'); window.location.href = window.location.pathname;</script>", height=0)
@@ -606,26 +697,26 @@ with col_head2:
 st.write("")
 is_admin = st.session_state.get("user_role") == "admin"
 cols = st.columns(4 if is_admin else 3)
-if cols[0].button("首頁", use_container_width=True, disabled=is_locked):
+if cols[0].button("首頁", use_container_width=True):
     st.session_state.active_tab = "home"
     st.rerun()
-if cols[1].button("解題解析", use_container_width=True, disabled=is_locked):
-    if not st.session_state.get("latest_analysis") and not st.session_state.get("is_processing"):
+if cols[1].button("解題解析", use_container_width=True):
+    if not st.session_state.get("latest_analysis"):
         st.warning("請先在首頁輸入或上傳題目並點擊「開始解題」！")
     else:
         st.session_state.active_tab = "analysis"
         st.rerun()
-if cols[2].button("解題紀錄", use_container_width=True, disabled=is_locked):
+if cols[2].button("解題紀錄", use_container_width=True):
     st.session_state.active_tab = "history"
     st.rerun()
-if is_admin and cols[3].button("後台", use_container_width=True, disabled=is_locked):
+if is_admin and cols[3].button("後台", use_container_width=True):
     st.session_state.active_tab = "admin"
     st.rerun()
 
 st.divider()
 
 # ====================
-# 5. 頁面分流邏輯
+# 6. 頁面分流邏輯
 # ====================
 
 # --- TAB 1: 首頁 ---
@@ -642,13 +733,11 @@ if st.session_state.active_tab == "home":
         "文字題目描述(可直接貼上題目文字、觀念問題)",
         placeholder="例如:請幫我解釋氧化還原反應中,氧化劑與還原劑的判斷方式...",
         height=120,
-        disabled=is_locked,
     )
     uploaded_files = st.file_uploader(
         "上傳題目圖片(選填,可1~5張)",
         type=["png", "jpg", "jpeg"],
         accept_multiple_files=True,
-        disabled=is_locked,
     )
 
     cropped_images = []
@@ -681,21 +770,21 @@ if st.session_state.active_tab == "home":
     with btn_col1:
         is_active = (current_depth == "精簡解答")
         btn_type = "primary" if is_active else "secondary"
-        if st.button("精簡解答", use_container_width=True, key="depth_btn_1", type=btn_type, disabled=is_locked):
+        if st.button("精簡解答", use_container_width=True, key="depth_btn_1", type=btn_type):
             st.session_state.selected_depth_mode = "精簡解答"
             st.rerun()
 
     with btn_col2:
         is_active = (current_depth == "標準詳解")
         btn_type = "primary" if is_active else "secondary"
-        if st.button("標準詳解", use_container_width=True, key="depth_btn_2", type=btn_type, disabled=is_locked):
+        if st.button("標準詳解", use_container_width=True, key="depth_btn_2", type=btn_type):
             st.session_state.selected_depth_mode = "標準詳解"
             st.rerun()
 
     with btn_col3:
         is_active = (current_depth == "深度解析")
         btn_type = "primary" if is_active else "secondary"
-        if st.button("深度解析", use_container_width=True, key="depth_btn_3", type=btn_type, disabled=is_locked):
+        if st.button("深度解析", use_container_width=True, key="depth_btn_3", type=btn_type):
             st.session_state.selected_depth_mode = "深度解析"
             st.rerun()
 
@@ -707,19 +796,14 @@ if st.session_state.active_tab == "home":
     }
     st.caption(f"目前選擇: **{depth_hints[depth_mode]}**")
 
-    selected_subject = st.selectbox(
-        "選擇題目科目", 
-        st.session_state.subjects, 
-        index=0,
-        disabled=is_locked
-    )
-    ref_answer = st.text_input("標準參考答案(選填)", placeholder="例如B、ACD、2.5 mol...", disabled=is_locked)
+    selected_subject = st.selectbox("選擇題目科目", st.session_state.subjects, index=0)
+    ref_answer = st.text_input("標準參考答案(選填)", placeholder="例如B、ACD、2.5 mol...")
 
     col_b1, col_b2 = st.columns([3, 1])
-    submit_btn = col_b1.button("開始解題", use_container_width=True, disabled=is_locked)
+    submit_btn = col_b1.button("開始解題", use_container_width=True)
     with col_b2:
         st.markdown('<div class="secondary-btn">', unsafe_allow_html=True)
-        clear_btn = st.button("清除", use_container_width=True, disabled=is_locked)
+        clear_btn = st.button("清除", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     if clear_btn:
@@ -739,90 +823,13 @@ if st.session_state.active_tab == "home":
                 "depth_mode": depth_mode,
                 "ref_answer": ref_answer
             }
+            # 設定旗標並刷新，進入獨立解題頁面
             st.session_state.is_processing = True
-            st.session_state.active_tab = "analysis"
             st.rerun()
 
 # --- TAB 2: 解題解析 ---
 elif st.session_state.active_tab == "analysis":
-    if st.session_state.get("is_processing", False) and "pending_task" in st.session_state:
-        st.markdown("### 解題結果")
-        st.caption("答題 → 觀念拆解 → 選項解析 → 追問")
-        status_card = st.empty()
-        progress_bar = st.empty()
-
-        task = st.session_state.pending_task
-        selected_subject = task["selected_subject"]
-        depth_mode = task["depth_mode"]
-        text_question = task["text_question"]
-        uploaded_files = task["uploaded_files"]
-        cropped_images = task["cropped_images"]
-        ref_answer = task["ref_answer"]
-
-        progress_steps = [
-            (15, "正在啟動AI解題引擎..."),
-            (35, "正在辨識題目內容與選項..."),
-            (60, f"正在進行【{selected_subject}】觀念推導..."),
-            (85, "正在生成選項分析與步驟說明..."),
-            (95, "正在整理最終答題報告...")
-        ]
-
-        for p_val, msg in progress_steps:
-            status_card.markdown(
-                f"""
-                <div class="custom-card" style="text-align: center; padding: 30px 20px;">
-                    <div style="font-size: 18px; font-weight: bold; color: #FFFFFF; margin-bottom: 12px;">
-                        已送出題目，分析題目中...
-                    </div>
-                    <div style="font-size: 13px; color: #94A3B8; margin-bottom: 20px;">{msg}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-            progress_bar.progress(p_val, text=f"解題進度 {p_val}%")
-            time.sleep(0.3)
-
-        with st.spinner("最後確認中..."):
-            images_to_process = cropped_images if cropped_images else ([Image.open(f) for f in uploaded_files] if uploaded_files else [])
-            ocr_text = extract_text_from_images(images_to_process, text_question, subject=selected_subject) if images_to_process else ""
-            
-            combined_question = ""
-            if text_question.strip():
-                combined_question += f"使用者文字題目/補充:\n{text_question.strip()}\n\n"
-            if ocr_text:
-                combined_question += f"圖片題目辨識內容:\n{ocr_text}"
-
-            ans, reasoning, options_analysis = call_ai_solver(
-                combined_question, subject=selected_subject, depth_mode=depth_mode
-            )
-            images_b64 = [compress_and_to_b64(img) for img in images_to_process]
-
-            new_record = {
-                "id": str(time.time()),
-                "user": user_name,
-                "time": get_taipei_now_str(),
-                "subject": selected_subject,
-                "depth_mode": depth_mode,
-                "ref_answer": ref_answer or "無",
-                "note": text_question or "無",
-                "ans": ans,
-                "reasoning": reasoning,
-                "options_analysis": options_analysis,
-                "images_b64": images_b64,
-                "admin_feedback": {
-                    "status": "pending",
-                    "comment": ""
-                },
-            }
-            st.session_state.history_logs.append(new_record)
-            st.session_state.latest_analysis = new_record
-            user_info["used_today"] += 1
-            save_config_from_session()
-            st.session_state.is_processing = False
-            del st.session_state.pending_task
-            st.rerun()
-
-    elif "latest_analysis" in st.session_state and st.session_state.latest_analysis:
+    if "latest_analysis" in st.session_state and st.session_state.latest_analysis:
         st.markdown("### 解題解析")
         st.caption("答案 → 觀念拆解 → 選項解析 → 追問")
         res = st.session_state.latest_analysis
@@ -893,13 +900,13 @@ elif st.session_state.active_tab == "analysis":
             )
 
         st.write("")
-        if st.button("重試原題", use_container_width=True, disabled=is_locked):
+        if st.button("重試原題", use_container_width=True):
             st.toast("已為您重新開啟試題進行重試！")
             st.session_state.active_tab = "home"
             st.rerun()
 
         st.markdown('<div class="secondary-btn">', unsafe_allow_html=True)
-        if st.button("回到解題主頁", use_container_width=True, disabled=is_locked):
+        if st.button("回到解題主頁", use_container_width=True):
             st.session_state.active_tab = "home"
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -909,7 +916,7 @@ elif st.session_state.active_tab == "analysis":
 # --- TAB 3: 我的解題紀錄 ---
 elif st.session_state.active_tab == "history":
     st.markdown("### 我的解題紀錄")
-    search_kw = st.text_input("搜尋關鍵字", placeholder="搜尋答案、題目文字、解析內容...", label_visibility="collapsed", disabled=is_locked)
+    search_kw = st.text_input("搜尋關鍵字", placeholder="搜尋答案、題目文字、解析內容...", label_visibility="collapsed")
     logs = [l for l in st.session_state.history_logs if l.get("user") == user_name or is_admin]
     
     if search_kw:
@@ -958,7 +965,7 @@ elif st.session_state.active_tab == "history":
 elif st.session_state.active_tab == "admin":
     if not is_admin:
         st.error("存取被拒絕: 您沒有進入後台管理系統的權限！")
-        if st.button("返回首頁", disabled=is_locked):
+        if st.button("返回首頁"):
             st.session_state.active_tab = "home"
             st.rerun()
         st.stop()
@@ -971,7 +978,6 @@ elif st.session_state.active_tab == "admin":
 
     st.markdown("<h3 style='margin-bottom: 12px;'>A.lab 後台管理系統</h3>", unsafe_allow_html=True)
     total_users_cnt = len(st.session_state.users_db)
-    bug_cnt = len(st.session_state.bug_reports)
     ai_status = "正常" if (st.session_state.enable_gemini or st.session_state.enable_openai) else "停用"
 
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
@@ -1013,10 +1019,10 @@ elif st.session_state.active_tab == "admin":
         with col_add:
             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.markdown("#### 新增使用者帳號")
-            new_username = st.text_input("輸入新使用者帳號", key="new_u_name", placeholder="例如:張小明", disabled=is_locked)
-            new_password = st.text_input("預設密碼", value="2580", type="password", key="new_u_pwd", disabled=is_locked)
-            new_limit = st.number_input("每日解題額度", min_value=1, max_value=999999, value=15, key="new_u_limit", disabled=is_locked)
-            if st.button("新增帳號", use_container_width=True, disabled=is_locked):
+            new_username = st.text_input("輸入新使用者帳號", key="new_u_name", placeholder="例如:張小明")
+            new_password = st.text_input("預設密碼", value="2580", type="password", key="new_u_pwd")
+            new_limit = st.number_input("每日解題額度", min_value=1, max_value=999999, value=15, key="new_u_limit")
+            if st.button("新增帳號", use_container_width=True):
                 new_username = new_username.strip()
                 if not new_username:
                     st.error("請輸入使用者帳號！")
@@ -1042,8 +1048,8 @@ elif st.session_state.active_tab == "admin":
             st.markdown("#### 刪除使用者帳號")
             deletable_users = [u for u, d in st.session_state.users_db.items() if u != st.session_state.user_name and d.get("role") != "admin"]
             if deletable_users:
-                user_to_delete = st.selectbox("選擇要刪除的使用者帳號", deletable_users, disabled=is_locked)
-                if st.button("確定刪除帳號", use_container_width=True, disabled=is_locked):
+                user_to_delete = st.selectbox("選擇要刪除的使用者帳號", deletable_users)
+                if st.button("確定刪除帳號", use_container_width=True):
                     del st.session_state.users_db[user_to_delete]
                     save_config_from_session()
                     st.warning(f"已成功刪除使用者帳號: {user_to_delete}")
@@ -1056,8 +1062,8 @@ elif st.session_state.active_tab == "admin":
         st.markdown("#### 解題額度調整機制")
         st.markdown("**1. 快速批量統一設定 (全體一般使用者)**")
         col_all1, col_all2 = st.columns([3, 1])
-        all_limit_val = col_all1.number_input("設定每日統一解題上限(題)", min_value=1, max_value=999999, value=15, key="all_limit_input", disabled=is_locked)
-        if col_all2.button("套用至全體", use_container_width=True, disabled=is_locked):
+        all_limit_val = col_all1.number_input("設定每日統一解題上限(題)", min_value=1, max_value=999999, value=15, key="all_limit_input")
+        if col_all2.button("套用至全體", use_container_width=True):
             for u_name, u_data in st.session_state.users_db.items():
                 if u_data.get("role") != "admin":
                     u_data["custom_limit"] = all_limit_val
@@ -1067,11 +1073,11 @@ elif st.session_state.active_tab == "admin":
 
         st.divider()
         st.markdown("**2. 單一指定帳號獨立調整**")
-        selected_user = st.selectbox("選擇要修改的帳號", list(st.session_state.users_db.keys()), disabled=is_locked)
+        selected_user = st.selectbox("選擇要修改的帳號", list(st.session_state.users_db.keys()))
         current_u_limit = int(st.session_state.users_db[selected_user].get("custom_limit", 15))
         col_single1, col_single2 = st.columns([3, 1])
-        new_limit_val = col_single1.number_input(f"設定 {selected_user} 的每日解題額度", min_value=1, max_value=99999, value=current_u_limit, key="custom_limit_input", disabled=is_locked)
-        if col_single2.button("儲存個別設定", use_container_width=True, disabled=is_locked):
+        new_limit_val = col_single1.number_input(f"設定 {selected_user} 的每日解題額度", min_value=1, max_value=99999, value=current_u_limit, key="custom_limit_input")
+        if col_single2.button("儲存個別設定", use_container_width=True):
             st.session_state.users_db[selected_user]["custom_limit"] = new_limit_val
             save_config_from_session()
             st.success(f"已更新 {selected_user} 的每日額度為 {new_limit_val} 題！")
@@ -1091,8 +1097,8 @@ elif st.session_state.active_tab == "admin":
         col_sub_add, col_sub_del = st.columns(2)
         with col_sub_add:
             st.markdown("##### 新增科目")
-            new_subject_name = st.text_input("輸入新科目名稱", placeholder="例如:物理、歷史、英文...", key="new_sub_input", disabled=is_locked)
-            if st.button("新增科目", use_container_width=True, disabled=is_locked):
+            new_subject_name = st.text_input("輸入新科目名稱", placeholder="例如:物理、歷史、英文...", key="new_sub_input")
+            if st.button("新增科目", use_container_width=True):
                 new_sub_clean = new_subject_name.strip()
                 if not new_sub_clean:
                     st.error("請輸入科目名稱！")
@@ -1107,8 +1113,8 @@ elif st.session_state.active_tab == "admin":
         with col_sub_del:
             st.markdown("##### 刪除科目")
             if len(st.session_state.subjects) > 1:
-                del_subject_target = st.selectbox("選擇要刪除的科目", st.session_state.subjects, key="del_sub_select", disabled=is_locked)
-                if st.button("確定刪除科目", use_container_width=True, disabled=is_locked):
+                del_subject_target = st.selectbox("選擇要刪除的科目", st.session_state.subjects, key="del_sub_select")
+                if st.button("確定刪除科目", use_container_width=True):
                     st.session_state.subjects.remove(del_subject_target)
                     save_config_from_session()
                     st.warning(f"已成功刪除科目: {del_subject_target}")
@@ -1126,8 +1132,8 @@ elif st.session_state.active_tab == "admin":
         else:
             filter_col1, filter_col2 = st.columns([1, 2])
             user_list = ["全部使用者"] + list(st.session_state.users_db.keys())
-            selected_filter_user = filter_col1.selectbox("過濾使用者帳號", user_list, disabled=is_locked)
-            search_query = filter_col2.text_input("關鍵字過濾", placeholder="輸入題目內容、答案或觀念關鍵字...", disabled=is_locked)
+            selected_filter_user = filter_col1.selectbox("過濾使用者帳號", user_list)
+            search_query = filter_col2.text_input("關鍵字過濾", placeholder="輸入題目內容、答案或觀念關鍵字...")
 
             filtered_logs = all_logs
             if selected_filter_user != "全部使用者":
@@ -1208,7 +1214,6 @@ elif st.session_state.active_tab == "admin":
                         }[x],
                         index=status_idx,
                         key=f"status_radio_{log_id}",
-                        disabled=is_locked,
                     )
                     new_comment = c_col2.text_area(
                         "正確回應與觀念再加強補充",
@@ -1216,9 +1221,8 @@ elif st.session_state.active_tab == "admin":
                         placeholder="請輸入給使用者的觀念補充、錯誤更正或學習建議...",
                         key=f"comment_text_{log_id}",
                         height=100,
-                        disabled=is_locked,
                     )
-                    if st.button("儲存點評評語", key=f"save_fb_{log_id}", disabled=is_locked):
+                    if st.button("儲存點評評語", key=f"save_fb_{log_id}"):
                         log["admin_feedback"] = {
                             "status": new_status_choice,
                             "comment": new_comment,
@@ -1239,13 +1243,12 @@ elif st.session_state.active_tab == "admin":
 
         with col_ai1:
             st.markdown("##### Google Gemini")
-            st.session_state.enable_gemini = st.toggle("啟用 Gemini AI 解題引擎", value=st.session_state.enable_gemini, disabled=is_locked)
+            st.session_state.enable_gemini = st.toggle("啟用 Gemini AI 解題引擎", value=st.session_state.enable_gemini)
             st.session_state.selected_gemini_model = st.selectbox(
                 "Gemini 模型選擇",
                 options=gemini_options,
                 index=gemini_idx,
                 help="Gemini 3.1 Pro 擁有極佳的複雜邏輯推導與解題能力",
-                disabled=is_locked,
             )
 
         openai_options = ["gpt-4o-mini", "gpt-4o", "o3-mini"]
@@ -1254,13 +1257,13 @@ elif st.session_state.active_tab == "admin":
 
         with col_ai2:
             st.markdown("##### OpenAI GPT")
-            st.session_state.enable_openai = st.toggle("啟用 OpenAI 解題引擎", value=st.session_state.enable_openai, disabled=is_locked)
+            st.session_state.enable_openai = st.toggle("啟用 OpenAI 解題引擎", value=st.session_state.enable_openai)
             st.session_state.selected_openai_model = st.selectbox(
-                "OpenAI 模型選擇", options=openai_options, index=openai_idx, disabled=is_locked
+                "OpenAI 模型選擇", options=openai_options, index=openai_idx
             )
 
         st.write("")
-        if st.button("儲存 AI 模型設定", use_container_width=True, disabled=is_locked):
+        if st.button("儲存 AI 模型設定", use_container_width=True):
             save_config_from_session()
             st.success("已成功儲存 AI 模型設定與服務狀態！")
         st.markdown('</div>', unsafe_allow_html=True)
