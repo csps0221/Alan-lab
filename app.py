@@ -435,7 +435,7 @@ if not st.session_state.logged_in:
         st.stop()
 
 # ====================
-# 3. AI 核心邏輯 (含自動降級防爆)
+# 3. AI 核心邏輯 (含自動重試與多模型切換)
 # ====================
 def build_system_prompt(subject: str = "通用", depth_mode: str = "標準詳解"):
     depth_instructions = {
@@ -474,65 +474,71 @@ def extract_text_from_images(image_list: list, extra_info: str = "", subject: st
     except Exception as e:
         return f"[圖片辨識說明]: {str(e)}"
 
-def execute_ai_request(question_text, subject, depth_mode, model_name=None):
-    """內部單次呼叫 AI 的函式"""
-    if not model_name:
-        model_name = st.session_state.selected_gemini_model
+def execute_ai_request(question_text, subject, depth_mode, preferred_model=None):
+    """強化版 AI 呼叫：支援同模型自動重試(Retry)與自動模型降級(Flash)"""
+    if not preferred_model:
+        preferred_model = st.session_state.selected_gemini_model
 
     sys_prompt = build_system_prompt(subject, depth_mode)
     prompt = f"{sys_prompt}\n\n【{subject}】題目需求與描述:\n{question_text}"
 
-    # 1. Gemini 嘗試
+    # 建立 Gemini 模型嘗試順序 (主力模型 -> Flash 快解模型)
+    gemini_models = [preferred_model, "gemini-2.5-flash", "gemini-1.5-flash"]
+    gemini_models = list(dict.fromkeys(gemini_models))  # 去除重複
+
+    # 1. 嘗試 Gemini (含模型自動切換與 3 次避讓重試)
     if GEMINI_API_KEY and st.session_state.enable_gemini:
-        try:
-            client = genai.Client(api_key=GEMINI_API_KEY)
-            resp = client.models.generate_content(model=model_name, contents=prompt)
-            raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
-            data = json.loads(raw)
-            return True, data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
-        except Exception:
-            pass
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        for model_name in gemini_models:
+            for attempt in range(3):  # 每個模型最多重試 3 次
+                try:
+                    resp = client.models.generate_content(model=model_name, contents=prompt)
+                    raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
+                    data = json.loads(raw)
+                    return True, data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
+                except Exception:
+                    time.sleep(1.5)  # 遇到 503 或網路抖動， pause 1.5 秒後重試
 
-    # 2. OpenAI 備援嘗試
+    # 2. 若 Gemini 完全無法回應，嘗試 OpenAI 備援
     if OPENAI_API_KEY and st.session_state.enable_openai:
-        try:
-            client = OpenAI(api_key=OPENAI_API_KEY)
-            resp = client.chat.completions.create(
-                model=st.session_state.selected_openai_model,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": f"【{subject}】題目需求與描述:\n{question_text}"}
-                ]
-            )
-            data = json.loads(resp.choices[0].message.content)
-            return True, data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
-        except Exception:
-            pass
+        for attempt in range(2):
+            try:
+                client = OpenAI(api_key=OPENAI_API_KEY)
+                resp = client.chat.completions.create(
+                    model=st.session_state.selected_openai_model,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": f"【{subject}】題目需求與描述:\n{question_text}"}
+                    ]
+                )
+                data = json.loads(resp.choices[0].message.content)
+                return True, data.get("ans", "無解答"), data.get("reasoning", "無解析內容"), data.get("options_analysis", [])
+            except Exception:
+                time.sleep(1)
 
-    return False, "解析失敗", "AI 伺服器繁忙中，請稍後重試。", []
+    return False, "解析失敗", "AI 伺服器目前連線不穩定，請點擊下方「重試原題」。", []
 
 def call_ai_solver(question_text, subject="通用", depth_mode="標準詳解"):
-    """主要解題進入點：若深度解析失敗，自動切換至一般模式"""
+    """主要解題進入點"""
     if not st.session_state.enable_gemini and not st.session_state.enable_openai:
-        return "服務已關閉", "管理員目前已關閉所有AI解題服務系統。", [], depth_mode
+        return "服務已關閉", "管理員目前已關閉所有 AI 解題服務系統。", [], depth_mode
 
-    # 第一步：嘗試使用者指定的模式（例如：深度解析）
+    # 第一步：嘗試執行請求
     success, ans, reasoning, options = execute_ai_request(question_text, subject, depth_mode)
     if success:
         return ans, reasoning, options, depth_mode
 
-    # 第二步：若指定為「深度解析」且失敗了（例如 503 過載），自動降級改用「一般模式（標準詳解）」搶先解題
+    # 第二步：若深度解析完全失敗，嘗試以標準詳解重新請求
     if depth_mode == "深度解析":
         success_std, ans_std, reasoning_std, options_std = execute_ai_request(
-            question_text, subject, "標準詳解", model_name="gemini-2.5-flash"
+            question_text, subject, "標準詳解", preferred_model="gemini-2.5-flash"
         )
         if success_std:
-            notice = "⚠️ **【系統提示】** 由於「深度解析」AI 伺服器流量較高，已先自動為您採用 **一般模式（標準詳解）** 完成解題！您可以在下方點擊按鈕重新嘗試深度解析。\n\n"
+            notice = "⚠️ **【系統提示】** 由於「深度解析」伺服器繁忙，已自動為您切換至 **一般模式（標準詳解）** 完成解題。\n\n"
             return ans_std, notice + reasoning_std, options_std, "標準詳解（降級）"
 
-    # 若連一般模式都失敗
-    return "解析失敗", "AI 系統繁忙中，請稍後再試一次。", [], depth_mode
+    return "解析失敗", "AI 伺服器目前連線不穩定，請點擊下方「重試原題」。", [], depth_mode
 
 # ====================
 # 4. 獨立解題執行頁面 (當 is_processing = True 時全螢幕獨立顯示)
@@ -641,7 +647,7 @@ with col_h1:
             <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 24px;">🧪</span>
                 <div>
-                    <div class="header-title">A.lab | 解題實驗室 2.0.7</div>
+                    <div class="header-title">A.lab | 解題實驗室 2.0.8</div>
                     <div class="header-sub">Science Lab Platform</div>
                 </div>
             </div>
